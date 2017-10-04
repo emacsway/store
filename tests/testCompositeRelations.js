@@ -6,11 +6,11 @@ define(['../store', './utils'], function(store, utils) {
         expectPks = utils.expectPks;
 
 
-    function testCompositeRelations() {
+    function testCompositeRelations(resolve, reject) {
         var registry = new store.Registry();
 
         // Use reverse order of store creation.
-        var authorStore = new store.Store(['id', 'lang'], ['firstName', 'lastName'], {}, new store.DummyBackend());
+        var authorStore = new store.Store(['id', 'lang'], ['firstName', 'lastName'], {}, new store.DummyStore());
         registry.register('author', authorStore);
 
         var postStore = new store.Store(['id', 'lang'], ['lang', 'slug', 'author'], {
@@ -23,7 +23,7 @@ define(['../store', './utils'], function(store, utils) {
                     onDelete: store.cascade
                 }
             }
-        }, new store.DummyBackend());
+        }, new store.DummyStore());
         registry.register('post', postStore);
 
         registry.ready();
@@ -34,7 +34,7 @@ define(['../store', './utils'], function(store, utils) {
             {id: 2, lang: 'en', firstName: 'Fn1', lastName: 'Ln2'},
             {id: 3, lang: 'en', firstName: 'Fn3', lastName: 'Ln1'}
         ];
-        authorStore.loadCollection(authors);
+        store.whenIter(authors, function(author) { return authorStore.getLocalStore().add(author); });
 
         var posts = [
             {id: 1, lang: 'en', slug: 'sl1', title: 'tl1', author: 1},
@@ -43,60 +43,63 @@ define(['../store', './utils'], function(store, utils) {
             {id: 3, lang: 'en', slug: 'sl3', title: 'tl1', author: 2},
             {id: 4, lang: 'en', slug: 'sl4', title: 'tl4', author: 3}
         ];
-        postStore.loadCollection(posts);
+        store.whenIter(posts, function(post) { return postStore.getLocalStore().add(post); });
 
-        registry.init();
-
-        var o, r, oid;
         var compositePkAccessor = function(o) { return [o.id, o.lang]; };
 
-        r = postStore.find({slug: 'sl1'});
+        var r = postStore.find({slug: 'sl1'});
+        assert(expectPks(r, [[1, 'en'], [2, 'en']], compositePkAccessor));
+
+        var author = registry.get('author').get([1, 'en']);
+        r = registry.get('post').find({'author': author});
         assert(expectPks(r, [[1, 'en'], [2, 'en']], compositePkAccessor));
 
         r = postStore.find({'author.firstName': 'Fn1'});
         assert(expectPks(r, [[1, 'en'], [2, 'en'], [3, 'en']], compositePkAccessor));
 
-        r = postStore.find({author: {'$fk': {firstName: 'Fn1'}}});
+        r = postStore.find({author: {'$rel': {firstName: 'Fn1'}}});
         assert(expectPks(r, [[1, 'en'], [2, 'en'], [3, 'en']], compositePkAccessor));
 
         r = authorStore.find({'posts.slug': {'$in': ['sl1', 'sl3']}});
         assert(expectPks(r, [[1, 'en'], [2, 'en']], compositePkAccessor));
 
-        r = authorStore.find({posts: {'$o2m': {slug: {'$in': ['sl1', 'sl3']}}}});
+        r = authorStore.find({posts: {'$rel': {slug: {'$in': ['sl1', 'sl3']}}}});
         assert(expectPks(r, [[1, 'en'], [2, 'en']], compositePkAccessor));
 
         // Add
-        o = {id: 5, lang: 'en', slug: 'sl5', title: 'tl5', author: 3};
-        oid = postStore.getObjectId(o);
-        postStore.add(o);
-        assert(oid in postStore.objectMapping);
-        assert([5, 'en'] in postStore.pkIndex);
-        assert(postStore.indexes['slug']['sl5'].indexOf(oid) !== -1);
+        var post = {id: 5, lang: 'en', slug: 'sl5', title: 'tl5', author: 3};
+        postStore.add(post).then(function(post) {
+            assert([5, 'en'] in postStore.getLocalStore().pkIndex);
+            assert(postStore.getLocalStore().indexes['slug']['sl5'].indexOf(post) !== -1);
 
-        // Update
-        o = postStore.get([5, 'en']);
-        oid = postStore.getObjectId(o);
-        o.slug = 'sl5.2';
-        postStore.update(o);
-        assert(oid in postStore.objectMapping);
-        assert([5, 'en'] in postStore.pkIndex);
-        assert(postStore.indexes['slug']['sl5.2'].indexOf(oid) !== -1);
-        assert(postStore.indexes['slug']['sl5'].indexOf(oid) === -1);
 
-        // Delete
-        o = authorStore.get([1, 'en']);
-        oid = postStore.getObjectId(postStore.find({author: 1, lang: 'en'})[0]);
-        assert(postStore.indexes['slug']['sl1'].indexOf(oid) !== -1);
-        assert([1, 'en'] in postStore.pkIndex);
-        authorStore.delete(o);
-        assert(postStore.indexes['slug']['sl1'].indexOf(oid) === -1);
-        assert(!([1, 'en'] in postStore.pkIndex));
-        r = authorStore.find();
-        assert(expectPks(r, [[1, 'ru'], [2, 'en'], [3, 'en']], compositePkAccessor));
-        r = postStore.find();
-        assert(expectPks(r, [[1, 'ru'], [3, 'en'], [4, 'en'], [5, 'en']], compositePkAccessor));
+            // Update
+            var post = postStore.get([5, 'en']);
+            post.slug = 'sl5.2';
+            postStore.update(post).then(function(post) {
+                assert([5, 'en'] in postStore.getLocalStore().pkIndex);
+                assert(postStore.getLocalStore().indexes['slug']['sl5.2'].indexOf(post) !== -1);
+                assert(postStore.getLocalStore().indexes['slug']['sl5'].indexOf(post) === -1);
 
-        registry.destroy();
+
+                // Delete
+                var author = authorStore.get([1, 'en']);
+                post = postStore.find({author: 1, lang: 'en'})[0];
+                assert(postStore.getLocalStore().indexes['slug']['sl1'].indexOf(post) !== -1);
+                assert([1, 'en'] in postStore.getLocalStore().pkIndex);
+                authorStore.delete(author).then(function(post) {
+                    assert(postStore.getLocalStore().indexes['slug']['sl1'].indexOf(post) === -1);
+                    assert(!([1, 'en'] in postStore.getLocalStore().pkIndex));
+                    var r = authorStore.find();
+                    assert(expectPks(r, [[1, 'ru'], [2, 'en'], [3, 'en']], compositePkAccessor));
+                    r = postStore.find();
+                    assert(expectPks(r, [[1, 'ru'], [3, 'en'], [4, 'en'], [5, 'en']], compositePkAccessor));
+
+                    registry.destroy();
+                    resolve();
+                });
+            });
+        });
     }
     return testCompositeRelations;
 });

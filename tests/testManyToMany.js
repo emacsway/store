@@ -6,10 +6,10 @@ define(['../store', './utils'], function(store, utils) {
         expectPks = utils.expectPks;
 
 
-    function testManyToMany() {
+    function testManyToMany(resolve, reject) {
         var registry = new store.Registry();
 
-        var tagStore = new store.Store(['id', 'lang'], ['slug'], {}, new store.DummyBackend());
+        var tagStore = new store.Store(['id', 'lang'], ['slug'], {}, new store.DummyStore());
         registry.register('tag', tagStore);
 
         var tagPostStore = new store.Store('id', [], {
@@ -29,7 +29,11 @@ define(['../store', './utils'], function(store, utils) {
                     onDelete: store.cascade
                 }
             }
-        }, new store.AutoIncrementBackend('id'));
+        }, new store.DummyStore());
+        tagPostStore.getLocalStore().setNextPk = function(obj) {
+            tagPostStore._pkCounter || (tagPostStore._pkCounter = 0);
+            this.getObjectAccessor().setPk(obj, ++tagPostStore._pkCounter);
+        };
         registry.register('tagPost', tagPostStore);
 
         var postStore = new store.Store(['id', 'lang'], ['lang', 'slug', 'author'], {
@@ -40,7 +44,7 @@ define(['../store', './utils'], function(store, utils) {
                     relatedRelation: 'tagPostSet'
                 }
             }
-        }, new store.DummyBackend());
+        }, new store.DummyStore());
         registry.register('post', postStore);
 
         registry.ready();
@@ -49,9 +53,10 @@ define(['../store', './utils'], function(store, utils) {
             {id: 1, lang: 'en', name: 'T1'},
             {id: 1, lang: 'ru', name: 'T1-ru'},
             {id: 2, lang: 'en', name: 'T1'},
-            {id: 3, lang: 'en', name: 'T3'}
+            {id: 3, lang: 'en', name: 'T3'},
+            {id: 4, lang: 'en', name: 'T4'}
         ];
-        tagStore.loadCollection(tags);
+        store.whenIter(tags, function(tag) { return tagStore.getLocalStore().add(tag); });
 
         var posts = [
             {id: 1, lang: 'en', slug: 'sl1', title: 'tl1'},
@@ -60,7 +65,7 @@ define(['../store', './utils'], function(store, utils) {
             {id: 3, lang: 'en', slug: 'sl3', title: 'tl1'},
             {id: 4, lang: 'en', slug: 'sl4', title: 'tl4'}
         ];
-        postStore.loadCollection(posts);
+        store.whenIter(posts, function(post) { return postStore.getLocalStore().add(post); });
 
         var tagPosts = [
             {postId: 1, postLang: 'en', tagId: 1, tagLang: 'en'},
@@ -69,9 +74,7 @@ define(['../store', './utils'], function(store, utils) {
             {postId: 3, postLang: 'en', tagId: 2, tagLang: 'en'},
             {postId: 4, postLang: 'en', tagId: 4, tagLang: 'en'}
         ];
-        tagPostStore.loadCollection(tagPosts);
-
-        registry.init();
+        store.whenIter(tagPosts, function(tagPost) { return tagPostStore.getLocalStore().add(tagPost); });
 
         var compositePkAccessor = function(o) { return [o.id, o.lang]; };
         var r;
@@ -82,10 +85,11 @@ define(['../store', './utils'], function(store, utils) {
         r = postStore.find({'tags.name': 'T1'});
         assert(expectPks(r, [[1, 'en'], [2, 'en'], [3, 'en']], compositePkAccessor));
 
-        r = postStore.find({tags: {'$m2m': {name: 'T1'}}});
+        r = postStore.find({tags: {'$rel': {name: 'T1'}}});
         assert(expectPks(r, [[1, 'en'], [2, 'en'], [3, 'en']], compositePkAccessor));
 
         registry.destroy();
+        resolve();
     }
     return testManyToMany;
 });

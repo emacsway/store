@@ -1,4 +1,11 @@
 define([
+    '../store',
+
+    './unitTests/testDjangoFilterQueryEngine',
+    './unitTests/testUtils',
+    './unitTests/testWhenIter',
+    './unitTests/testMapper',
+
     './testQuery',
     './testSimpleRelations',
     './testCompositeRelations',
@@ -7,33 +14,38 @@ define([
     './testDecompose',
     './testObservable',
     './testStoreObservable',
-    './testUtils'
-], function(
-    testQuery,
-    testSimpleRelations,
-    testCompositeRelations,
-    testManyToMany,
-    testCompose,
-    testDecompose,
-    testObservable,
-    testStoreObservable,
-    testUtils
-) {
+    './testResult',
+    './testTransaction',
+
+    './MemoryStoreTests/testSimpleRelationsMemoryStore',
+
+    './testBench'
+], function(store) {
 
     'use strict';
+    var suites = Array.prototype.slice.call(arguments, 1);
 
+    function log(msg) {
+        console.debug(msg);
+    }
 
     function testSuite() {
-        testQuery();
-        testSimpleRelations();
-        testCompositeRelations();
-        testManyToMany();
-        testCompose();
-        testDecompose();
-        testObservable();
-        testStoreObservable();
-        testUtils();
-        console.debug('Test OK');
+        log('Total tests: ' + suites.length);
+        console.time && console.time('testSuite');
+        store.when(store.whenIter(suites, function(suite, i) {
+            log("Run test " + (i + 1));
+            return new Promise(function(resolve, reject) {
+                var result = suite(resolve, reject);
+                if (result && typeof result.then === "function") {
+                    result.then(resolve);
+                }
+            });
+        }), function() {
+            log('Test OK');
+            console.timeEnd && console.timeEnd('testSuite');
+        }, function() {
+            log('Test FAILED!');
+        });
     }
     return testSuite;
 });

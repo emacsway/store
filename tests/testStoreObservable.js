@@ -5,12 +5,9 @@ define(['../store', './utils'], function(store, utils) {
     var assert = utils.assert;
 
 
-    function testStoreObservable() {
-        // Example of fast real-time aggregation
+    function testStoreObservable(resolve, reject) {
         var registry = new store.Registry();
-        registry.getObservable().attach('register', function(aspect, newStore) {
-            newStore.getObservable().attach('load', function(aspect, obj) { store.observable(obj); });
-        });
+
 
         var postStore = new store.Store('id', ['slug', 'author'], {
             foreignKey: {
@@ -22,28 +19,29 @@ define(['../store', './utils'], function(store, utils) {
                     onDelete: store.cascade
                 }
             }
-        }, new store.DummyBackend());
+        }, new store.DummyStore());
         registry.register('post', postStore);
-        registry.post.getObservable().attachBidirectional('load', 'author', function(aspect, post, author) {
-            if (!author.views_total) {
-                author.views_total = 0;
-            }
-            author.getObservable().set('views_total', author.views_total + post.views_count);
-            post.getObservable().attach('views_count', function(name, oldValue, newValue) {
-                author.getObservable().set('views_total', author.views_total - oldValue + newValue);
-            });
+
+        registry.get('post').getLocalStore().observed().attachByAttr('views_count', 0, function(attr, oldValue, newValue) {
+            var post = this;
+            var author = registry.get('author').get(post.author);
+            author.views_total = (author.views_total || 0) + newValue - oldValue;
+            registry.get('author').getLocalStore().update(author);
         });
 
-        var authorStore = new store.Store('id', ['firstName', 'lastName'], {}, new store.DummyBackend());
+
+        var authorStore = new store.Store('id', ['firstName', 'lastName'], {}, new store.DummyStore());
         registry.register('author', authorStore);
+
 
         registry.ready();
 
         var authors = [
             {id: 1, firstName: 'Fn1', lastName: 'Ln1'},
+            {id: 2, firstName: 'Fn2', lastName: 'Ln2'},
             {id: 3, firstName: 'Fn3', lastName: 'Ln1'}
         ];
-        authorStore.loadCollection(authors);
+        store.whenIter(authors, function(author) { return authorStore.getLocalStore().add(author); });
 
         var posts = [
             {id: 1, slug: 'sl1', title: 'tl1', author: 1, views_count: 5},
@@ -52,19 +50,29 @@ define(['../store', './utils'], function(store, utils) {
             {id: 4, slug: 'sl3', title: 'tl1', author: 2, views_count: 8},
             {id: 5, slug: 'sl4', title: 'tl4', author: 3, views_count: 9}
         ];
-        postStore.loadCollection(posts);
+        store.whenIter(posts, function(post) { return postStore.getLocalStore().add(post); });
 
-        registry.init();
-
-        var author = registry.author.get(1);
+        var author = registry.get('author').get(1);
         assert(author.views_total === 11);
-        var post = registry.post.find({author: author.id})[0];
-        post.getObservable().set('views_count', post.views_count + 1);
+
+        // update
+        var post = registry.get('post').find({author: author.id})[0];
+        post.views_count += 1;
+        registry.get('post').getLocalStore().update(post);
         assert(author.views_total === 12);
 
-        var author2 = {id: 2, firstName: 'Fn1', lastName: 'Ln2'};
-        registry.author.load(author2);
-        assert(author2.views_total === 15);
+        // add
+        registry.get('post').getLocalStore().add(
+            {id: 6, slug: 'sl6', title: 'tl6', author: 1, views_count: 10}
+        );
+        assert(author.views_total === 22);
+
+        // delete
+        registry.get('post').getLocalStore().delete(
+            registry.get('post').get(6)
+        );
+        assert(author.views_total === 12);
+        resolve();
     }
     return testStoreObservable;
 });
