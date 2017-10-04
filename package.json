@@ -1,7 +1,7 @@
 {
   "name": "store",
   "version": "0.8.1",
-  "description": "The Store.js is a super lightweight implementation of Repository pattern for relational data and composed nested aggregates. The library allows you to use Domain-Driven Design (DDD) on client-side as well as reactive programming.",
+  "description": "Store.js is a super lightweight implementation of Repository pattern for relational data and composed nested aggregates. The library allows you to use Domain-Driven Design (DDD) on client-side as well as reactive programming.",
   "main": "store.js",
   "directories": {
     "doc": "docs",
