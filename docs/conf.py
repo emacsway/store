@@ -32,7 +32,7 @@
 # ones.
 primary_domain = 'js'
 
-extensions = ['rst2pdf.pdfbuilder']
+extensions = []  # 'rst2pdf.pdfbuilder'
 
 pdf_documents = [
     ('index', u'Store', u'Store.js', u'JOOR Inc.'),

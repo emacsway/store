@@ -10,11 +10,22 @@ Welcome to Store.js' documentation!
 Store.js is a super lightweight implementation of Repository_ pattern for relational data and aggregates.
 The library allows you to use Domain-Driven Design (DDD) on client-side as well as reactive programming.
 
-* Home Page: https://github.com/joor/store-js-external
+
+Canonical repo
+--------------
+
+* Home Page and Source Code: https://github.com/joor/store-js-external
 * Docs: TODO
-* Browse source code (canonical repo): https://github.com/joor/store-js-external
-* Get source code (canonical repo): ``git clone https://github.com/joor/store-js-external.git``
-* The main developed fork: https://github.com/emacsway/store
+
+
+Edge (unstable) repo
+--------------------
+
+* Home Page and Source Code: https://github.com/emacsway/store
+* Docs: http://edge-storejs.readthedocs.io/
+
+Articles
+--------
 
 * Article (in English) "`Implementation of the pattern Repository for browser's JavaScript <#>`_" TODO
 * Article (in Russian): "`Реализация паттерна Repository в браузерном JavaScript <https://emacsway.github.io/ru/javascript-and-repository-pattern/>`_"
