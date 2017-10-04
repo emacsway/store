@@ -910,7 +910,7 @@ Contributing
 Please, use `Dojo Style Guide <https://dojotoolkit.org/reference-guide/1.10/developer/styleguide.html>`_ and `Dojo contributing workflow <https://github.com/dojo/meta/blob/master/CONTRIBUTING.md>`_.
 
 
-Alternatives, Related And Useful Links
+Alternatives, related and useful links
 ======================================
 
 - `Dojo2 Stores <https://github.com/dojo/stores>`_ - \
@@ -933,6 +933,13 @@ Alternatives, Related And Useful Links
   implementation of `Repository`_ pattern by MBaaS Kinvey, `source code <https://github.com/Kinvey/js-sdk/tree/master/src/datastore/src>`__
 - `Pocket.js <https://github.com/vincentracine/pocketjs>`_ - \
   a wrapper for the window.localStorage. It provides helpful methods which utilise MongoDB's proven syntax and provides a powerful lightweight abstraction from the complexity of managing and querying local storage.
+
+Examples of the simplest implementations of the Repository pattern by JavaScript in the project `todomvc.com <http://todomvc.com/>`_:
+
+- Angular2: https://github.com/tastejs/todomvc/blob/gh-pages/examples/angular2/app/services/store.ts
+- Angular1: https://github.com/tastejs/todomvc/blob/gh-pages/examples/angularjs/js/services/todoStorage.js
+- React: https://github.com/tastejs/todomvc/blob/gh-pages/examples/react-alt/js/stores/todoStore.js
+
 
 .. _Coupling: http://wiki.c2.com/?CouplingAndCohesion
 .. _Cohesion: http://wiki.c2.com/?CouplingAndCohesion
