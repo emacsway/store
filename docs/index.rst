@@ -22,7 +22,7 @@ Edge (unstable) repo
 --------------------
 
 * Home Page and Source Code: https://github.com/emacsway/store
-* Docs: http://edge-storejs.readthedocs.io/
+* Docs: https://edge-storejs.readthedocs.io/
 
 Articles
 --------

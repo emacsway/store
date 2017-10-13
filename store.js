@@ -1873,19 +1873,13 @@ define(['./polyfill'], function() {
                 this._subject.observe(enable);
                 Result.prototype.observe.call(this, enable);
                 var self = this;
-                var arrayObserver = function(aspect, obj) {
-                    var newObjectList = self._reproducer();
-                    self._setState(newObjectList);
-                    self.observed().notify(aspect, obj);
-                };
-                for (var i = 0; i < Result.observedMethods.length; i++) {
-                    this._disposable = this._disposable.add(
-                        this._subject.observed().attach(Result.observedMethods[i], arrayObserver)
-                    );
-                }
                 for (var i = 0; i < Result.observedProcedures.length; i++) {
                     this._disposable = this._disposable.add(
-                        this._subject.observed().attach(Result.observedProcedures[i], arrayObserver)
+                        this._subject.observed().attach(Result.observedProcedures[i], function(aspect, obj) {
+                            var newObjectList = self._reproducer();
+                            self._setState(newObjectList);
+                            self.observed().notify(aspect, obj);
+                        })
                     );
                 }
             }
