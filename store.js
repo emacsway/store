@@ -36,6 +36,12 @@ define(['./polyfill'], function() {
         syncDependencies: function(obj, old) {
             throw Error("Not Implemented Error");
         },
+        getRequiredIndexes: function() {
+            throw Error("Not Implemented Error");
+        },
+        addIndex: function(index) {
+            throw Error("Not Implemented Error");
+        },
         get: function(pk) {
             throw Error("Not Implemented Error");
         },
@@ -81,8 +87,15 @@ define(['./polyfill'], function() {
         getName: function() {
             return this._name;
         },
-        compose: function(obj, state) {},
-        destroy: function() {}
+        getRequiredIndexes: function() {
+            return [];
+        },
+        addIndex: function(index) {
+        },
+        compose: function(obj, state) {
+        },
+        destroy: function() {
+        }
     }, Object.create(IStore.prototype));
 
 
@@ -94,7 +107,13 @@ define(['./polyfill'], function() {
         var remoteStore = remoteStore ? remoteStore : (objectAccessor.pk instanceof Array ? new DummyStore(objectAccessor) : new AutoIncrementStore(objectAccessor));
         this._remoteStore = withAspect(ObservableStoreAspect, remoteStore).init();
 
-        this._localStore = indexesOrLocalStore instanceof IStore ? indexesOrLocalStore : withAspect(ObservableStoreAspect, new MemoryStore(objectAccessor, indexesOrLocalStore, modelOrMapper)).init();
+        if (indexesOrLocalStore instanceof IStore) {
+            this._localStore = indexesOrLocalStore;
+        } else {
+            var indexes = indexesOrLocalStore;
+            indexes = indexes.concat(this.getRequiredIndexes());
+            this._localStore = withAspect(ObservableStoreAspect, new MemoryStore(objectAccessor, indexes, modelOrMapper)).init();
+        }
     }
     CompositeStore.prototype = clone({
         constructor: CompositeStore,
@@ -402,19 +421,25 @@ define(['./polyfill'], function() {
 
 
     var RelationalStoreAspect = {
-        init: function(relations, indexesOrLocalStore) {
+        init: function(relations) {
+            var self = this;
             typeof relations === "undefined" && (relations = {});
-            typeof indexesOrLocalStore === "undefined" && (indexesOrLocalStore = []);
             this._initRelations(relations);
-            if (indexesOrLocalStore instanceof Array) {
-                var indexes = indexesOrLocalStore;
-                for (var relationName in this.relations.foreignKey) {  // TODO: Remove this side-effect?
-                    var fields = this.relations.foreignKey[relationName].getField();
-                    for (var i = 0; i < fields.length; i++) {
-                        if (!(fields[i] in indexes)) { indexes[fields[i]] = {}; }
+            this.getRequiredIndexes().forEach(function(index) {
+                self.addIndex(index);
+            });
+        },
+        getRequiredIndexes: function() {
+            var indexes = __super__(RelationalStoreAspect, this).getRequiredIndexes.call(this).slice();
+            for (var relationName in this.relations.foreignKey) {
+                var fields = this.relations.foreignKey[relationName].getField();
+                for (var i = 0; i < fields.length; i++) {
+                    if (indexes.indexOf(fields[i]) === -1) {
+                        indexes.push(fields[i]);
                     }
                 }
             }
+            return indexes;
         },
         register: function(name, registry) {
             var self = this;
@@ -1343,7 +1368,7 @@ define(['./polyfill'], function() {
         _visitors: clone(AbstractQueryWalker.prototype._visitors, {
             possibilityOfIndexUsage: {
                 accept: function(owner, left, right) {
-                    return owner._queryEngine.has(left) && ['$eq', '$and'].indexOf(left) === -1;
+                    return owner._queryEngine.has(left) && ['$eq', '$and', '$query', '$subjects', '$orderby', '$limit', '$offset'].indexOf(left) === -1;
                 },
                 visit: function(owner, left, right, query) {
                     owner._indexIsPossible = false;
@@ -1939,6 +1964,10 @@ define(['./polyfill'], function() {
         },
         syncDependencies: function(obj, old) {
         },
+        getRequiredIndexes: function() {
+            var indexes = AbstractStore.prototype.getRequiredIndexes.call(this);
+            return indexes.concat(this.getObjectAccessor().pk).filter(arrayUniqueFilter);
+        },
         _prepareQuery: function(queryEngine, query) {
             return new PrepareQuery(queryEngine, query).compute();
         },
@@ -2007,22 +2036,25 @@ define(['./polyfill'], function() {
 
 
     function MemoryStore(pkOrObjectAccessor, indexes, modelOrMapper) {
+        var self = this;
         AbstractLeafStore.call(this, pkOrObjectAccessor, modelOrMapper);
         this.objectList = [];
         this.pkIndex = {};
         this.indexes = {};
         indexes || (indexes = []);
-        var pkFields = toArray(this.getObjectAccessor().pk);
-        for (var i = 0; i < pkFields.length; i++) {
-            if (!(pkFields[i] in indexes)) { indexes[pkFields[i]] = {}; }
-        }
-        for (var i = 0; i < indexes.length; i++) {
-            this.indexes[indexes[i]] = {};
-        }
+        indexes = indexes.concat(this.getRequiredIndexes());
+        indexes.forEach(function(index) {
+            self.addIndex(index);
+        });
     }
     MemoryStore.prototype = clone({
         constructor: MemoryStore,
         _queryEngine: simpleQueryEngine,
+        addIndex: function(index) {
+            if (!(index in this.indexes)) {
+                this.indexes[index] = {};
+            }
+        },
         add: function(obj, state) {
             obj = this.restoreInstance(obj);
             if (!this.getObjectAccessor().pkExists(obj)) {
