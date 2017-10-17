@@ -769,15 +769,20 @@ define(['./polyfill'], function() {
 
     function AbstractQueryEngine() {
         this._operators = {};
-        this._compoundOperatorNames = [];
     }
     AbstractQueryEngine.prototype = {
         constructor: AbstractQueryEngine,
-        register: function(operatorName, operatorCallable, isCompound) {
-            this._operators[operatorName] = operatorCallable;
-            if (isCompound) {
-                this._compoundOperatorNames.push(operatorName);
+        register: function(operatorName, operatorCallable, properties) {
+            properties = clone(properties, {
+                indexable: false,
+                compound: false
+            });
+            for (var i in properties) {
+                if (properties.hasOwnProperty(i)) {
+                    operatorCallable[i] = properties[i];
+                }
             }
+            this._operators[operatorName] = operatorCallable;
             return operatorCallable;
         },
         get: function(operatorName) {
@@ -787,7 +792,10 @@ define(['./polyfill'], function() {
             return operatorName in this._operators;
         },
         isCompound: function(operatorName) {
-            return this._compoundOperatorNames.indexOf(operatorName) !== -1;
+            return this._operators[operatorName].compound;
+        },
+        isIndexable: function(operatorName) {
+            return this._operators[operatorName].indexable;
         },
         execute: function(query, objectAccessor, context) {
             throw Error("Not Implemented Error!");
@@ -832,19 +840,19 @@ define(['./polyfill'], function() {
 
     simpleQueryEngine.register('$query', function(operands, objectAccessor, obj) {
         return this.execute(operands, objectAccessor, obj);
-    });
+    }, {indexable: true});
     simpleQueryEngine.register('$subjects', function(operands, objectAccessor, obj) {
         return true;
-    });
+    }, {indexable: true});
     simpleQueryEngine.register('$orderby', function(operands, objectAccessor, obj) {
         return true;
-    }, true);
+    }, {indexable: true, compound: true});
     simpleQueryEngine.register('$limit', function(operands, objectAccessor, obj) {
         return true;
-    });
+    }, {indexable: true});
     simpleQueryEngine.register('$offset', function(operands, objectAccessor, obj) {
         return true;
-    });
+    }, {indexable: true});
     simpleQueryEngine.register('$and', function(operands, objectAccessor, obj) {
         var result = true;
         for (var i in operands) {
@@ -854,7 +862,7 @@ define(['./polyfill'], function() {
             }
         };
         return result;
-    }, true);
+    }, {indexable: true, compound: true});
     simpleQueryEngine.register('$or', function(operands, objectAccessor, obj) {
         var result = false;
         for (var i in operands) {
@@ -864,7 +872,7 @@ define(['./polyfill'], function() {
             }
         };
         return result;
-    }, true);
+    }, {compound: true});
     simpleQueryEngine.register('$in', function(operands, objectAccessor, obj) {
         var result = false,
             field = operands[0],
@@ -881,7 +889,7 @@ define(['./polyfill'], function() {
         var field = operands[0],
             value = operands[1];
         return objectAccessor.getValue(obj, field) == value;
-    });
+    }, {indexable: true});
     simpleQueryEngine.register('$ne', function(operands, objectAccessor, obj) {
         var field = operands[0],
             value = operands[1];
@@ -930,29 +938,29 @@ define(['./polyfill'], function() {
 
     djangoFilterQueryEngine.register('$query', function(operands, objectAccessor, obj) {
         return this.execute(operands, objectAccessor, obj);
-    });
+    }, {indexable: true});
     djangoFilterQueryEngine.register('$subjects', function(operands, objectAccessor, obj) {
         return {};
-    });
+    }, {indexable: true});
     djangoFilterQueryEngine.register('$orderby', function(operands, objectAccessor, obj) {
         return {};
     }, true);
     djangoFilterQueryEngine.register('$limit', function(operands, objectAccessor, obj) {
         return {};
-    });
+    }, {indexable: true});
     djangoFilterQueryEngine.register('$offset', function(operands, objectAccessor, obj) {
         return {};
-    });
+    }, {indexable: true});
     djangoFilterQueryEngine.register('$and', function(operands, objectAccessor, context) {
         var result = {};
         for (var i in operands) {
             clone(this.execute(operands[i], objectAccessor, context), result);
         };
         return result;
-    }, true);
+    }, {indexable: true, compound: true});
     djangoFilterQueryEngine.register('$or', function(operands, objectAccessor, context) {
         throw Error("Not Supported!");
-    }, true);
+    }, {compound: true});
     djangoFilterQueryEngine.register('$callable', function(operands, objectAccessor, context) {
         throw Error("Not Supported!");
     });
@@ -966,7 +974,7 @@ define(['./polyfill'], function() {
         }
         result[field] = value;
         return result;
-    });
+    }, {indexable: true});
     djangoFilterQueryEngine.register('$ne', function(operands, objectAccessor, context) {
         var result = {},
             field = operands[0],
@@ -1368,7 +1376,7 @@ define(['./polyfill'], function() {
         _visitors: clone(AbstractQueryWalker.prototype._visitors, {
             possibilityOfIndexUsage: {
                 accept: function(owner, left, right) {
-                    return owner._queryEngine.has(left) && ['$eq', '$and', '$query', '$subjects', '$orderby', '$limit', '$offset'].indexOf(left) === -1;
+                    return owner._queryEngine.has(left) && !owner._queryEngine.isIndexable(left);
                 },
                 visit: function(owner, left, right, query) {
                     owner._indexIsPossible = false;
