@@ -36,6 +36,12 @@ define(['./polyfill'], function() {
         syncDependencies: function(obj, old) {
             throw Error("Not Implemented Error");
         },
+        getRequiredIndexes: function() {
+            throw Error("Not Implemented Error");
+        },
+        addIndex: function(index) {
+            throw Error("Not Implemented Error");
+        },
         get: function(pk) {
             throw Error("Not Implemented Error");
         },
@@ -81,8 +87,15 @@ define(['./polyfill'], function() {
         getName: function() {
             return this._name;
         },
-        compose: function(obj, state) {},
-        destroy: function() {}
+        getRequiredIndexes: function() {
+            return [];
+        },
+        addIndex: function(index) {
+        },
+        compose: function(obj, state) {
+        },
+        destroy: function() {
+        }
     }, Object.create(IStore.prototype));
 
 
@@ -94,7 +107,13 @@ define(['./polyfill'], function() {
         var remoteStore = remoteStore ? remoteStore : (objectAccessor.pk instanceof Array ? new DummyStore(objectAccessor) : new AutoIncrementStore(objectAccessor));
         this._remoteStore = withAspect(ObservableStoreAspect, remoteStore).init();
 
-        this._localStore = indexesOrLocalStore instanceof IStore ? indexesOrLocalStore : withAspect(ObservableStoreAspect, new MemoryStore(objectAccessor, indexesOrLocalStore, modelOrMapper)).init();
+        if (indexesOrLocalStore instanceof IStore) {
+            this._localStore = indexesOrLocalStore;
+        } else {
+            var indexes = indexesOrLocalStore;
+            indexes = indexes.concat(this.getRequiredIndexes());
+            this._localStore = withAspect(ObservableStoreAspect, new MemoryStore(objectAccessor, indexes, modelOrMapper)).init();
+        }
     }
     CompositeStore.prototype = clone({
         constructor: CompositeStore,
@@ -402,19 +421,25 @@ define(['./polyfill'], function() {
 
 
     var RelationalStoreAspect = {
-        init: function(relations, indexesOrLocalStore) {
+        init: function(relations) {
+            var self = this;
             typeof relations === "undefined" && (relations = {});
-            typeof indexesOrLocalStore === "undefined" && (indexesOrLocalStore = []);
             this._initRelations(relations);
-            if (indexesOrLocalStore instanceof Array) {
-                var indexes = indexesOrLocalStore;
-                for (var relationName in this.relations.foreignKey) {  // TODO: Remove this side-effect?
-                    var fields = this.relations.foreignKey[relationName].getField();
-                    for (var i = 0; i < fields.length; i++) {
-                        if (!(fields[i] in indexes)) { indexes[fields[i]] = {}; }
+            this.getRequiredIndexes().forEach(function(index) {
+                self.addIndex(index);
+            });
+        },
+        getRequiredIndexes: function() {
+            var indexes = __super__(RelationalStoreAspect, this).getRequiredIndexes.call(this).slice();
+            for (var relationName in this.relations.foreignKey) {
+                var fields = this.relations.foreignKey[relationName].getField();
+                for (var i = 0; i < fields.length; i++) {
+                    if (indexes.indexOf(fields[i]) === -1) {
+                        indexes.push(fields[i]);
                     }
                 }
             }
+            return indexes;
         },
         register: function(name, registry) {
             var self = this;
@@ -744,15 +769,20 @@ define(['./polyfill'], function() {
 
     function AbstractQueryEngine() {
         this._operators = {};
-        this._compoundOperatorNames = [];
     }
     AbstractQueryEngine.prototype = {
         constructor: AbstractQueryEngine,
-        register: function(operatorName, operatorCallable, isCompound) {
-            this._operators[operatorName] = operatorCallable;
-            if (isCompound) {
-                this._compoundOperatorNames.push(operatorName);
+        register: function(operatorName, operatorCallable, properties) {
+            properties = clone(properties, {
+                indexable: false,
+                compound: false
+            });
+            for (var i in properties) {
+                if (properties.hasOwnProperty(i)) {
+                    operatorCallable[i] = properties[i];
+                }
             }
+            this._operators[operatorName] = operatorCallable;
             return operatorCallable;
         },
         get: function(operatorName) {
@@ -762,7 +792,10 @@ define(['./polyfill'], function() {
             return operatorName in this._operators;
         },
         isCompound: function(operatorName) {
-            return this._compoundOperatorNames.indexOf(operatorName) !== -1;
+            return this._operators[operatorName].compound;
+        },
+        isIndexable: function(operatorName) {
+            return this._operators[operatorName].indexable;
         },
         execute: function(query, objectAccessor, context) {
             throw Error("Not Implemented Error!");
@@ -807,19 +840,19 @@ define(['./polyfill'], function() {
 
     simpleQueryEngine.register('$query', function(operands, objectAccessor, obj) {
         return this.execute(operands, objectAccessor, obj);
-    });
+    }, {indexable: true});
     simpleQueryEngine.register('$subjects', function(operands, objectAccessor, obj) {
         return true;
-    });
+    }, {indexable: true});
     simpleQueryEngine.register('$orderby', function(operands, objectAccessor, obj) {
         return true;
-    }, true);
+    }, {indexable: true, compound: true});
     simpleQueryEngine.register('$limit', function(operands, objectAccessor, obj) {
         return true;
-    });
+    }, {indexable: true});
     simpleQueryEngine.register('$offset', function(operands, objectAccessor, obj) {
         return true;
-    });
+    }, {indexable: true});
     simpleQueryEngine.register('$and', function(operands, objectAccessor, obj) {
         var result = true;
         for (var i in operands) {
@@ -829,7 +862,7 @@ define(['./polyfill'], function() {
             }
         };
         return result;
-    }, true);
+    }, {indexable: true, compound: true});
     simpleQueryEngine.register('$or', function(operands, objectAccessor, obj) {
         var result = false;
         for (var i in operands) {
@@ -839,7 +872,7 @@ define(['./polyfill'], function() {
             }
         };
         return result;
-    }, true);
+    }, {compound: true});
     simpleQueryEngine.register('$in', function(operands, objectAccessor, obj) {
         var result = false,
             field = operands[0],
@@ -856,7 +889,7 @@ define(['./polyfill'], function() {
         var field = operands[0],
             value = operands[1];
         return objectAccessor.getValue(obj, field) == value;
-    });
+    }, {indexable: true});
     simpleQueryEngine.register('$ne', function(operands, objectAccessor, obj) {
         var field = operands[0],
             value = operands[1];
@@ -905,29 +938,29 @@ define(['./polyfill'], function() {
 
     djangoFilterQueryEngine.register('$query', function(operands, objectAccessor, obj) {
         return this.execute(operands, objectAccessor, obj);
-    });
+    }, {indexable: true});
     djangoFilterQueryEngine.register('$subjects', function(operands, objectAccessor, obj) {
         return {};
-    });
+    }, {indexable: true});
     djangoFilterQueryEngine.register('$orderby', function(operands, objectAccessor, obj) {
         return {};
     }, true);
     djangoFilterQueryEngine.register('$limit', function(operands, objectAccessor, obj) {
         return {};
-    });
+    }, {indexable: true});
     djangoFilterQueryEngine.register('$offset', function(operands, objectAccessor, obj) {
         return {};
-    });
+    }, {indexable: true});
     djangoFilterQueryEngine.register('$and', function(operands, objectAccessor, context) {
         var result = {};
         for (var i in operands) {
             clone(this.execute(operands[i], objectAccessor, context), result);
         };
         return result;
-    }, true);
+    }, {indexable: true, compound: true});
     djangoFilterQueryEngine.register('$or', function(operands, objectAccessor, context) {
         throw Error("Not Supported!");
-    }, true);
+    }, {compound: true});
     djangoFilterQueryEngine.register('$callable', function(operands, objectAccessor, context) {
         throw Error("Not Supported!");
     });
@@ -941,7 +974,7 @@ define(['./polyfill'], function() {
         }
         result[field] = value;
         return result;
-    });
+    }, {indexable: true});
     djangoFilterQueryEngine.register('$ne', function(operands, objectAccessor, context) {
         var result = {},
             field = operands[0],
@@ -1343,7 +1376,7 @@ define(['./polyfill'], function() {
         _visitors: clone(AbstractQueryWalker.prototype._visitors, {
             possibilityOfIndexUsage: {
                 accept: function(owner, left, right) {
-                    return owner._queryEngine.has(left) && ['$eq', '$and'].indexOf(left) === -1;
+                    return owner._queryEngine.has(left) && !owner._queryEngine.isIndexable(left);
                 },
                 visit: function(owner, left, right, query) {
                     owner._indexIsPossible = false;
@@ -1939,6 +1972,10 @@ define(['./polyfill'], function() {
         },
         syncDependencies: function(obj, old) {
         },
+        getRequiredIndexes: function() {
+            var indexes = AbstractStore.prototype.getRequiredIndexes.call(this);
+            return indexes.concat(this.getObjectAccessor().pk).filter(arrayUniqueFilter);
+        },
         _prepareQuery: function(queryEngine, query) {
             return new PrepareQuery(queryEngine, query).compute();
         },
@@ -2007,22 +2044,25 @@ define(['./polyfill'], function() {
 
 
     function MemoryStore(pkOrObjectAccessor, indexes, modelOrMapper) {
+        var self = this;
         AbstractLeafStore.call(this, pkOrObjectAccessor, modelOrMapper);
         this.objectList = [];
         this.pkIndex = {};
         this.indexes = {};
         indexes || (indexes = []);
-        var pkFields = toArray(this.getObjectAccessor().pk);
-        for (var i = 0; i < pkFields.length; i++) {
-            if (!(pkFields[i] in indexes)) { indexes[pkFields[i]] = {}; }
-        }
-        for (var i = 0; i < indexes.length; i++) {
-            this.indexes[indexes[i]] = {};
-        }
+        indexes = indexes.concat(this.getRequiredIndexes());
+        indexes.forEach(function(index) {
+            self.addIndex(index);
+        });
     }
     MemoryStore.prototype = clone({
         constructor: MemoryStore,
         _queryEngine: simpleQueryEngine,
+        addIndex: function(index) {
+            if (!(index in this.indexes)) {
+                this.indexes[index] = {};
+            }
+        },
         add: function(obj, state) {
             obj = this.restoreInstance(obj);
             if (!this.getObjectAccessor().pkExists(obj)) {
