@@ -10,7 +10,7 @@ Canonical repo
 --------------
 
 * Home Page and Source Code: https://github.com/joor/store-js-external
-* Docs: `<docs/index.rst>`_
+* Docs: TODO
 
 
 Edge (unstable) repo
