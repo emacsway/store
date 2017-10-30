@@ -1785,6 +1785,7 @@ define(['./polyfill'], function() {
 
                 this.broadObserver = function() {
                     var newObjectList = Array.prototype.slice.call(self._reproducer());
+                    self._initObjectList = newObjectList;
                     for (var i = 0; i < self._localReproducers.length; i++) {
                         newObjectList = self._localReproducers[i](newObjectList);
                     }
@@ -1859,7 +1860,7 @@ define(['./polyfill'], function() {
                 this.observed().attachByAttr(attrs, defaultValue, observer)
             );
             for (var i = 0; i < this.length; i++) {
-                // Don't use Result.prototype.forEach() insted, it'll add observer on load
+                // Don't use Result.prototype.forEach() instead, it'll add observer on load
                 var obj = this[i];
                 var objObservable = new Observable(obj);
                 objObservable.attach(attrs, observer);
@@ -1910,6 +1911,7 @@ define(['./polyfill'], function() {
                     this._disposable = this._disposable.add(
                         this._subject.observed().attach(Result.observedProcedures[i], function(aspect, obj) {
                             var newObjectList = self._reproducer();
+                            self._initObjectList = newObjectList;
                             self._setState(newObjectList);
                             self.observed().notify(aspect, obj);
                         })
