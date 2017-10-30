@@ -1682,11 +1682,13 @@ define(['./polyfill'], function() {
             var self = this,
                 selfArguments = arguments;
             this._localReproducers.push(function(list) {
+                list = Array.prototype.slice.call(list);
                 Array.prototype[name].apply(list, selfArguments);
                 return list;
             });
+            var oldObjectList = Array.prototype.slice.call(this);
             var returnValue = Array.prototype[name].apply(this, arguments);
-            this.observed().notify(name, arguments, returnValue);
+            self._notifyStateChanged(oldObjectList, this);
             return returnValue;
         };
     };
@@ -1709,8 +1711,8 @@ define(['./polyfill'], function() {
     };
 
 
-    Result.observedMethods = ['filter', 'slice'];
-    Result.observedProcedures = ['sort', 'push', 'shift', 'unshift'];
+    Result.observedMethods = ['filter', 'slice'];  // TODO: add support for slice
+    Result.observedProcedures = ['sort', 'reverse', 'pop', 'push', 'shift', 'unshift'];
 
 
     Result.prototype = clone({
@@ -1733,10 +1735,9 @@ define(['./polyfill'], function() {
                     this._subject.observed().attach(['add'], function(aspect, obj, index) {
                         if (self.indexOf(obj) !== -1) { return; }
                         if (self._filter(obj)) {
-                            var objectList = self._initObjectList;
-                            if (typeof index === "undefined") { index = objectList.length; }
-                            objectList.splice(index, 0, obj);
-                            objectList = Array.prototype.slice.call(objectList);
+                            if (typeof index === "undefined") { index = self._initObjectList.length; }
+                            self._initObjectList.splice(index, 0, obj);
+                            var objectList = Array.prototype.slice.call(self._initObjectList);
                             for (var i = 0; i < self._localReproducers.length; i++) {
                                 objectList = self._localReproducers[i](objectList);
                             }
@@ -1759,9 +1760,8 @@ define(['./polyfill'], function() {
                             }
                         } else {
                             if (self._filter(obj)) {
-                                var objectList = self._initObjectList;
-                                objectList.splice(objectList.length, 0, obj);
-                                objectList = Array.prototype.slice.call(objectList);
+                                self._initObjectList.splice(self._initObjectList.length, 0, obj);
+                                var objectList = Array.prototype.slice.call(self._initObjectList);
                                 for (var i = 0; i < self._localReproducers.length; i++) {
                                     objectList = self._localReproducers[i](objectList);
                                 }
@@ -1784,21 +1784,14 @@ define(['./polyfill'], function() {
                 );
 
                 this.broadObserver = function() {
-                    var newObjectList = Array.prototype.slice.call(self._reproducer());
-                    self._initObjectList = newObjectList;
+                    var oldObjectList = Array.prototype.slice.call(self);
+                    self._initObjectList = Array.prototype.slice.call(self._reproducer());
+                    var newObjectList = Array.prototype.slice.call(self._initObjectList);
                     for (var i = 0; i < self._localReproducers.length; i++) {
                         newObjectList = self._localReproducers[i](newObjectList);
                     }
-                    var deleted = Array.prototype.filter.call(self, function(i) { return newObjectList.indexOf(i) === -1; });
-                    var added = Array.prototype.filter.call(newObjectList, function(i) { return self.indexOf(i) === -1; });
                     self._setState(newObjectList);
-                    for (var i = 0; i < deleted.length; i++) {
-                        self.observed().notify('delete', deleted[i], newObjectList.indexOf(deleted[i]));
-                    };
-                    for (var i = 0; i < added.length; i++) {
-                        self.observed().notify('add', added[i], newObjectList.indexOf(added[i]));
-                    };
-
+                    self._notifyStateChanged(oldObjectList, newObjectList);
                 };
 
                 /* this._disposable = this._disposable.add(
@@ -1877,6 +1870,19 @@ define(['./polyfill'], function() {
                 Array.prototype.push.call(this, list[i]);
             }
         },
+        _notifyStateChanged: function(oldObjectList, newObjectList) {
+            var self = this;
+            var deleted = Array.prototype.filter.call(oldObjectList, function(i) { return newObjectList.indexOf(i) === -1; });
+            var added = Array.prototype.filter.call(newObjectList, function(i) { return oldObjectList.indexOf(i) === -1; });
+            deleted.reverse();  // To preserve indexes fixed on changed array, we bagin from tail.
+            for (var i = 0; i < deleted.length; i++) {
+                self.observed().notify('delete', deleted[i], oldObjectList.indexOf(deleted[i]));
+            };
+            for (var i = 0; i < added.length; i++) {
+                self.observed().notify('add', added[i], newObjectList.indexOf(added[i]));
+            };
+
+        },
         toArray: function() {
             return Array.prototype.slice.call(this);
         },
@@ -1901,24 +1907,10 @@ define(['./polyfill'], function() {
     SubResult.prototype = clone({
         constructor: SubResult,
         observe: function(enable) {
-            if (enable === false) {
-                Result.prototype.observe.call(this, enable);
-            } else if (!this.observed().isObservable()) {
+            if (enable) {
                 this._subject.observe(enable);
-                Result.prototype.observe.call(this, enable);
-                var self = this;
-                for (var i = 0; i < Result.observedProcedures.length; i++) {
-                    this._disposable = this._disposable.add(
-                        this._subject.observed().attach(Result.observedProcedures[i], function(aspect, obj) {
-                            var newObjectList = self._reproducer();
-                            self._initObjectList = newObjectList;
-                            self._setState(newObjectList);
-                            self.observed().notify(aspect, obj);
-                        })
-                    );
-                }
             }
-            return this.observed();
+            return Result.prototype.observe.call(this, enable);
         }
     }, Object.create(Result.prototype));
 
