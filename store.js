@@ -1732,55 +1732,15 @@ define(['./polyfill'], function() {
                 var self = this;
 
                 this._disposable = this._disposable.add(
-                    this._subject.observed().attach(['add'], function(aspect, obj, index) {
-                        if (self.indexOf(obj) !== -1) { return; }
-                        if (self._filter(obj)) {
-                            if (typeof index === "undefined") { index = self._initObjectList.length; }
-                            self._initObjectList.splice(index, 0, obj);
-                            var objectList = Array.prototype.slice.call(self._initObjectList);
-                            for (var i = 0; i < self._localReproducers.length; i++) {
-                                objectList = self._localReproducers[i](objectList);
-                            }
-                            self._setState(objectList);
-                            self.observed().notify('add', obj, objectList.indexOf(obj));
-                        }
-                    })
+                    this._subject.observed().attach(['add'], this._getAddObserver())
                 );
 
                 this._disposable = this._disposable.add(
-                    this._subject.observed().attach(['update'], function(aspect, obj, old) {
-                        var index = self.indexOf(obj);
-                        if (index !== -1) {
-                            if (self._filter(obj)) {
-                                self.observed().notify('update', obj, old);
-                            } else {
-                                self._initObjectList.splice(self._initObjectList.indexOf(obj), 1);
-                                Array.prototype.splice.call(self, index, 1);
-                                self.observed().notify('delete', obj, index);
-                            }
-                        } else {
-                            if (self._filter(obj)) {
-                                self._initObjectList.splice(self._initObjectList.length, 0, obj);
-                                var objectList = Array.prototype.slice.call(self._initObjectList);
-                                for (var i = 0; i < self._localReproducers.length; i++) {
-                                    objectList = self._localReproducers[i](objectList);
-                                }
-                                self._setState(objectList);
-                                self.observed().notify('add', obj, index);
-                            }
-                        }
-                    })
+                    this._subject.observed().attach(['update'], this._getUpdateObserver())
                 );
 
                 this._disposable = this._disposable.add(
-                    this._subject.observed().attach(['delete'], function(aspect, obj, index) {
-                        var index = self.indexOf(obj);
-                        if (index !== -1) {
-                            self._initObjectList.splice(self._initObjectList.indexOf(obj), 1);
-                            Array.prototype.splice.call(self, index, 1);
-                            self.observed().notify('delete', obj, index);
-                        }
-                    })
+                    this._subject.observed().attach(['delete'], this._getDeleteObserver())
                 );
 
                 /* this._disposable = this._disposable.add(
@@ -1803,6 +1763,58 @@ define(['./polyfill'], function() {
             }
             return this;
         },
+        _getAddObserver: function() {
+            var self = this;
+            return function(aspect, obj, index) {
+                if (self.indexOf(obj) !== -1) { return; }
+                if (self._filter(obj)) {
+                    if (typeof index === "undefined") { index = self._initObjectList.length; }
+                    self._initObjectList.splice(index, 0, obj);
+                    var objectList = Array.prototype.slice.call(self._initObjectList);
+                    for (var i = 0; i < self._localReproducers.length; i++) {
+                        objectList = self._localReproducers[i](objectList);
+                    }
+                    self._setState(objectList);
+                    self.observed().notify('add', obj, objectList.indexOf(obj));
+                }
+            };
+        },
+        _getUpdateObserver: function() {
+            var self = this;
+            return function(aspect, obj, old) {
+                var index = self.indexOf(obj);
+                if (index !== -1) {
+                    if (self._filter(obj)) {
+                        self.observed().notify('update', obj, old);
+                    } else {
+                        self._initObjectList.splice(self._initObjectList.indexOf(obj), 1);
+                        Array.prototype.splice.call(self, index, 1);
+                        self.observed().notify('delete', obj, index);
+                    }
+                } else {
+                    if (self._filter(obj)) {
+                        self._initObjectList.splice(self._initObjectList.length, 0, obj);
+                        var objectList = Array.prototype.slice.call(self._initObjectList);
+                        for (var i = 0; i < self._localReproducers.length; i++) {
+                            objectList = self._localReproducers[i](objectList);
+                        }
+                        self._setState(objectList);
+                        self.observed().notify('add', obj, index);
+                    }
+                }
+            };
+        },
+        _getDeleteObserver: function() {
+            var self = this;
+            return function(aspect, obj, index) {
+                var index = self.indexOf(obj);
+                if (index !== -1) {
+                    self._initObjectList.splice(self._initObjectList.indexOf(obj), 1);
+                    Array.prototype.splice.call(self, index, 1);
+                    self.observed().notify('delete', obj, index);
+                }
+            };
+        },
         _getBroadObserver: function() {
             var self = this;
             return function() {
@@ -1814,7 +1826,7 @@ define(['./polyfill'], function() {
                 }
                 self._setState(newObjectList);
                 self._notifyStateChanged(oldObjectList, newObjectList);
-            }
+            };
         },
         addRelatedSubject: function(relatedSubject) {
             this._relatedSubjects.push(relatedSubject);
