@@ -1692,26 +1692,6 @@ define(['./polyfill'], function() {
             return returnValue;
         };
     };
-
-
-    Result.wrapMethod = function(name) {
-        return function() {
-            var self = this,
-                selfArguments = arguments;
-            var child = new SubResult(
-                this,
-                function() {
-                    return Array.prototype[name].apply(self, selfArguments);
-                },
-                (name === 'filter' ? arguments[0] : function(obj) { return true; }),
-                Array.prototype[name].apply(this, arguments)
-            );
-            return child;
-        };
-    };
-
-
-    Result.observedMethods = ['filter', 'slice'];  // TODO: add support for slice
     Result.observedProcedures = ['sort', 'reverse', 'pop', 'push', 'shift', 'unshift'];
 
 
@@ -1734,15 +1714,12 @@ define(['./polyfill'], function() {
                 this._disposable = this._disposable.add(
                     this._subject.observed().attach(['add'], this._getAddObserver())
                 );
-
                 this._disposable = this._disposable.add(
                     this._subject.observed().attach(['update'], this._getUpdateObserver())
                 );
-
                 this._disposable = this._disposable.add(
                     this._subject.observed().attach(['delete'], this._getDeleteObserver())
                 );
-
                 /* this._disposable = this._disposable.add(
                     this._subject.observed().attach(['add', 'update', 'delete'], this._getBroadObserver())
                 );
@@ -1763,7 +1740,7 @@ define(['./polyfill'], function() {
             }
             return this;
         },
-        _getAddObserver: function() {
+        _getAddObserver: function() {  // TODO: Now it's possible to support .map()
             var self = this;
             return function(aspect, obj, index) {
                 if (self.indexOf(obj) !== -1) { return; }
@@ -1853,6 +1830,32 @@ define(['./polyfill'], function() {
             }
             return accumValue;
         },
+        filter: function() {
+            var self = this,
+                selfArguments = arguments;
+            var child = new SubResult(
+                this,
+                function() {
+                    return Array.prototype.filter.apply(self, selfArguments);
+                },
+                arguments[0],
+                Array.prototype.filter.apply(this, arguments)
+            );
+            return child;
+        },
+        slice: function() {
+            var self = this,
+                selfArguments = arguments;
+            var resultType = arguments.length ? PartialResult : SubResult;
+            return new resultType(
+                this,
+                function() {
+                    return Array.prototype.slice.apply(self, selfArguments);
+                },
+                function(obj) { return true; },
+                Array.prototype.slice.apply(this, arguments)
+            );
+        },
         forEach: function(callback, thisArg) {  // Do not change signature of parent class
             Array.prototype.forEach.apply(this, arguments);
             this._disposable = this._disposable.add(
@@ -1904,9 +1907,6 @@ define(['./polyfill'], function() {
             return JSON.stringify(this.toArray());
         }
     }, Object.create(Array.prototype));
-    for (var i = 0; i < Result.observedMethods.length; i++) {
-        Result.prototype[Result.observedMethods[i]] = Result.wrapMethod(Result.observedMethods[i]);
-    }
     for (var i = 0; i < Result.observedProcedures.length; i++) {
         Result.prototype[Result.observedProcedures[i]] = Result.wrapProcedure(Result.observedProcedures[i]);
     }
@@ -1927,6 +1927,25 @@ define(['./polyfill'], function() {
             return Result.prototype.observe.call(this, enable);
         }
     }, Object.create(Result.prototype));
+
+
+    function PartialResult(subject, reproducer, filter, objectList, relatedSubjects) {
+        SubResult.apply(this, arguments);
+    }
+    PartialResult.prototype = clone({
+        constructor: PartialResult,
+        _getAddObserver: Result.prototype._getBroadObserver,
+        _getUpdateObserver: function() {
+            var self = this;
+            return function(aspect, obj, old) {
+                SubResult.prototype._getUpdateObserver().apply(this, arguments);
+                if (self.indexOf(obj) !== -1) {
+                    self.observed().notify('update', obj, old);
+                }
+            };
+        },
+        _getDeleteObserver: Result.prototype._getBroadObserver
+    }, Object.create(SubResult.prototype));
 
 
     function AbstractLeafStore(pkOrObjectAccessor, modelOrMapper) {
