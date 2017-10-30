@@ -1783,19 +1783,8 @@ define(['./polyfill'], function() {
                     })
                 );
 
-                this.broadObserver = function() {
-                    var oldObjectList = Array.prototype.slice.call(self);
-                    self._initObjectList = Array.prototype.slice.call(self._reproducer());
-                    var newObjectList = Array.prototype.slice.call(self._initObjectList);
-                    for (var i = 0; i < self._localReproducers.length; i++) {
-                        newObjectList = self._localReproducers[i](newObjectList);
-                    }
-                    self._setState(newObjectList);
-                    self._notifyStateChanged(oldObjectList, newObjectList);
-                };
-
                 /* this._disposable = this._disposable.add(
-                    this._subject.observed().attach(['add', 'update', 'delete'], this.broadObserver)
+                    this._subject.observed().attach(['add', 'update', 'delete'], this._getBroadObserver())
                 );
                 this._disposable = this._disposable.add(
                     this._subject.observed().attach('update', function(aspect, obj, old) {
@@ -1807,18 +1796,31 @@ define(['./polyfill'], function() {
                 for (var i = 0; i < self._relatedSubjects.length; i++) {
                     this._disposable = this._disposable.add(
                         self._relatedSubjects[i].observed().attach(
-                            ['add', 'update', 'delete'], self.broadObserver
+                            ['add', 'update', 'delete'], self._getBroadObserver()
                         )
                     );
                 };
             }
             return this;
         },
+        _getBroadObserver: function() {
+            var self = this;
+            return function() {
+                var oldObjectList = Array.prototype.slice.call(self);
+                self._initObjectList = Array.prototype.slice.call(self._reproducer());
+                var newObjectList = Array.prototype.slice.call(self._initObjectList);
+                for (var i = 0; i < self._localReproducers.length; i++) {
+                    newObjectList = self._localReproducers[i](newObjectList);
+                }
+                self._setState(newObjectList);
+                self._notifyStateChanged(oldObjectList, newObjectList);
+            }
+        },
         addRelatedSubject: function(relatedSubject) {
             this._relatedSubjects.push(relatedSubject);
             if (this.observed().isObservable()) {
                 this._disposable = this._disposable.add(
-                    relatedSubject.observed().attach(['add', 'update', 'delete'], this.broadObserver)
+                    relatedSubject.observed().attach(['add', 'update', 'delete'], this._getBroadObserver())
                 );
             }
             return this;
