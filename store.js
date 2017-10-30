@@ -1740,7 +1740,7 @@ define(['./polyfill'], function() {
             }
             return this;
         },
-        _getAddObserver: function() {  // TODO: Now it's possible to support .map()
+        _getAddObserver: function() {  // TODO: Now we are able to support .map()
             var self = this;
             return function(aspect, obj, index) {
                 if (self.indexOf(obj) !== -1) { return; }
