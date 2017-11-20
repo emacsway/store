@@ -2985,12 +2985,11 @@ define(['./polyfill'], function() {
         constructor: CompositeDisposable,
         dispose: function() {
             for (var i = 0; i < this._delegates.length; i++) {
-                this._delegates[i]();
+                this._delegates[i].dispose();
             }
         },
         add: function(other) {
-            this._delegates.push(other);
-            return this;
+            return new CompositeDisposable(this._delegates.concat([other]));
         }
     }, Object.create(IDisposable.prototype));
 
