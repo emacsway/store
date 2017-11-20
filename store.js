@@ -2745,10 +2745,10 @@ define(['./polyfill'], function() {
      * That's why we use accessor instead of reference.
      * To prevent circular references.
      */
-    function observe(obj, accessorName, constructor) {
-        var observable = new (constructor || Observable)(obj);
-        obj[accessorName || 'observed'] = function() { return observable; };
-        return obj;
+    function observe(subject, accessorName, constructor) {
+        var observable = new (constructor || Observable)(subject);
+        subject[accessorName || 'observed'] = function() { return observable; };
+        return subject;
     }
 
 
