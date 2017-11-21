@@ -22,7 +22,7 @@ Edge (unstable) repo
 Articles
 --------
 
-* Article (in English) "`Implementation of the pattern Repository for browser's JavaScript <#>`_" TODO
+* Article (in English) "`Implementation of the pattern Repository for browser's JavaScript <https://emacsway.github.io/en/javascript-and-repository-pattern/>`_" TODO
 * Article (in Russian): "`Реализация паттерна Repository в браузерном JavaScript <https://emacsway.github.io/ru/javascript-and-repository-pattern/>`_"
 
 .. _Repository: http://martinfowler.com/eaaCatalog/repository.html

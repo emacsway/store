@@ -2745,10 +2745,10 @@ define(['./polyfill'], function() {
      * That's why we use accessor instead of reference.
      * To prevent circular references.
      */
-    function observe(obj, accessorName, constructor) {
-        var observable = new (constructor || Observable)(obj);
-        obj[accessorName || 'observed'] = function() { return observable; };
-        return obj;
+    function observe(subject, accessorName, constructor) {
+        var observable = new (constructor || Observable)(subject);
+        subject[accessorName || 'observed'] = function() { return observable; };
+        return subject;
     }
 
 
@@ -2985,12 +2985,11 @@ define(['./polyfill'], function() {
         constructor: CompositeDisposable,
         dispose: function() {
             for (var i = 0; i < this._delegates.length; i++) {
-                this._delegates[i]();
+                this._delegates[i].dispose();
             }
         },
         add: function(other) {
-            this._delegates.push(other);
-            return this;
+            return new CompositeDisposable(this._delegates.concat([other]));
         }
     }, Object.create(IDisposable.prototype));
 
