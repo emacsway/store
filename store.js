@@ -814,7 +814,7 @@ define(['./polyfill'], function() {
                 var right = query[left];
                 if (this.has(left)) {
                     result = result && this.get(left).call(this, right, objectAccessor, context);
-                } else if (left !== "__id") {
+                } else if (!isSpecialAttr(left)) {
                     result = result && this._executeRight(left, right, objectAccessor, context);
                 }
                 if (!result) {
@@ -1182,7 +1182,7 @@ define(['./polyfill'], function() {
             for (var i = 0; i < this._activeVisitors.length; i++) {
                 var visitor = this._visitors[this._activeVisitors[i]];
                 for (var left in clone(query, {})) {
-                    if (left === "__id") continue;
+                    if (isSpecialAttr(left)) { continue; }
                     var right = query[left];
                     if (visitor.accept(this, left, right)) {
                         visitor.visit(this, left, right, query);
@@ -3110,7 +3110,7 @@ define(['./polyfill'], function() {
         destination = typeof destination !== "undefined" ? destination : new source.constructor();
         for (var i in source) {
             if (source.hasOwnProperty(i)) {
-                if (['__id', '__oid'].indexOf(source[i]) !== -1) continue;
+                if (isSpecialAttr(i)) { continue; }
                 setter(destination, i, source[i]);
             }
         }
@@ -3128,10 +3128,16 @@ define(['./polyfill'], function() {
         }
         for (var i in source) {
             if (source.hasOwnProperty(i)) {
+                if (isSpecialAttr(i)) { continue; }
                 setter(destination, i, deepClone(source[i], destination[i]));
             }
         }
         return destination;
+    }
+
+
+    function isSpecialAttr(attr) {
+        return ['__id', '__oid'].indexOf(attr) !== -1;
     }
 
 
@@ -3225,7 +3231,6 @@ define(['./polyfill'], function() {
         wrapped['__super_' + getId(aspect) + '__'] = function() {
             return delegate;
         };
-        if (wrapped.hasOwnProperty('__id')) { delete wrapped.__id; }
         wrapped.init = function() {
             if (aspect.init) {
                 aspect.init.apply(this, Array.prototype.slice.call(selfArguments, 2));
@@ -3259,7 +3264,6 @@ define(['./polyfill'], function() {
         newPrototype['__super_' + getId(mixinPrototype) + '__'] = function() {
             return parentPrototype;
         };
-        if (newPrototype.hasOwnProperty('__id')) { delete newPrototype.__id; }
         return newPrototype;
     }
 
