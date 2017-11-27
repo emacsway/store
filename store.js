@@ -811,10 +811,11 @@ define(['./polyfill'], function() {
         execute: function(query, objectAccessor, context) {
             var result = true;
             for (var left in query) {
+                if (isSpecialAttr(left)) { continue; }
                 var right = query[left];
                 if (this.has(left)) {
                     result = result && this.get(left).call(this, right, objectAccessor, context);
-                } else if (left !== "__id") {
+                } else {
                     result = result && this._executeRight(left, right, objectAccessor, context);
                 }
                 if (!result) {
@@ -1182,7 +1183,7 @@ define(['./polyfill'], function() {
             for (var i = 0; i < this._activeVisitors.length; i++) {
                 var visitor = this._visitors[this._activeVisitors[i]];
                 for (var left in clone(query, {})) {
-                    if (left === "__id") continue;
+                    if (isSpecialAttr(left)) { continue; }
                     var right = query[left];
                     if (visitor.accept(this, left, right)) {
                         visitor.visit(this, left, right, query);
@@ -1265,16 +1266,6 @@ define(['./polyfill'], function() {
                     delete query[left];
                     var relation = owner._store.getRelation(left);
                     clone(relation.getQuery(right), query);
-                    /*
-                    var relatedField = relation.getRelatedField();
-                    var relatedValue = relation.getRelatedValue(right);
-                    var rightPart = {};
-                    for (var i = 0; i < relatedField.length; i++) {
-                        rightPart[relatedField[i]] = relatedValue[i];
-                    }
-                    right = {'$rel': rightPart};
-                    query[left] = right;
-                    */
                 }
             },
             emulatedRelation: {
@@ -1316,34 +1307,6 @@ define(['./polyfill'], function() {
                         // TODO: remove duplicates from orClause for case of o2m?
                         owner._subjects.push(orClause);
                         return {'$or': orClause};
-                        /*
-                        owner._subjects.push(relatedQueryResult);
-                        var makeOrClause = function () {
-                            var orQuery = [];
-                            for (var i = 0; i < relatedQueryResult.length; i++) {
-                                orQuery.push(relation.getQuery(relatedQueryResult[i]));
-                            }
-                            return orQuery;
-                        };
-                        var disposable;
-                        var query = {'$or': makeOrClause()};
-
-                        var deco = function(func) {
-                            return function(enable) {
-                                var result = func.call(this, enable);
-                                if (enable === false) {
-                                    disposable.dispose();
-                                } else {
-                                    disposable = this.observed().attach(['add', 'update', 'delete'], function(aspect, obj) {
-                                        query['$or'] = makeOrClause(); // Immutable query and functional walker are impossible!
-                                    });
-                                }
-                                return result;
-                            };
-                        };
-                        relatedQueryResult.observe = deco(relatedQueryResult.observe);
-                        return query;
-                        */
                     });
                 }
             }
@@ -1712,15 +1675,6 @@ define(['./polyfill'], function() {
                 this._disposable = this._disposable.add(
                     this._subject.observed().attach(['delete'], this._getDeleteObserver())
                 );
-                /* this._disposable = this._disposable.add(
-                    this._subject.observed().attach(['add', 'update', 'delete'], this._getBroadObserver())
-                );
-                this._disposable = this._disposable.add(
-                    this._subject.observed().attach('update', function(aspect, obj, old) {
-                    if (self.indexOf(obj) !== -1) {
-                        self.observed().notify('update', obj, old);
-                    }
-                })); */
 
                 for (var i = 0; i < self._relatedSubjects.length; i++) {
                     this._disposable = this._disposable.add(
@@ -2007,8 +1961,7 @@ define(['./polyfill'], function() {
             var self = this;
             return function(aspect, obj, old) {
                 var mappedObj = self._mapping.get(obj);
-                var mappedOld = {};
-                clone(mappedObj, mappedOld);
+                var mappedOld = clone(mappedObj);
                 self._mapping.update(obj);
                 SubResult.prototype._getUpdateObserver.call(self).call(this, aspect, mappedObj, mappedOld);
             };
@@ -3158,6 +3111,7 @@ define(['./polyfill'], function() {
         destination = typeof destination !== "undefined" ? destination : new source.constructor();
         for (var i in source) {
             if (source.hasOwnProperty(i)) {
+                if (isSpecialAttr(i)) { continue; }
                 setter(destination, i, source[i]);
             }
         }
@@ -3175,10 +3129,16 @@ define(['./polyfill'], function() {
         }
         for (var i in source) {
             if (source.hasOwnProperty(i)) {
+                if (isSpecialAttr(i)) { continue; }
                 setter(destination, i, deepClone(source[i], destination[i]));
             }
         }
         return destination;
+    }
+
+
+    function isSpecialAttr(attr) {
+        return ['__id', '__oid'].indexOf(attr) !== -1;
     }
 
 
@@ -3272,7 +3232,6 @@ define(['./polyfill'], function() {
         wrapped['__super_' + getId(aspect) + '__'] = function() {
             return delegate;
         };
-        if (wrapped.hasOwnProperty('__id')) { delete wrapped.__id; }
         wrapped.init = function() {
             if (aspect.init) {
                 aspect.init.apply(this, Array.prototype.slice.call(selfArguments, 2));
@@ -3306,7 +3265,6 @@ define(['./polyfill'], function() {
         newPrototype['__super_' + getId(mixinPrototype) + '__'] = function() {
             return parentPrototype;
         };
-        if (newPrototype.hasOwnProperty('__id')) { delete newPrototype.__id; }
         return newPrototype;
     }
 
