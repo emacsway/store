@@ -811,10 +811,11 @@ define(['./polyfill'], function() {
         execute: function(query, objectAccessor, context) {
             var result = true;
             for (var left in query) {
+                if (isSpecialAttr(left)) { continue; }
                 var right = query[left];
                 if (this.has(left)) {
                     result = result && this.get(left).call(this, right, objectAccessor, context);
-                } else if (!isSpecialAttr(left)) {
+                } else {
                     result = result && this._executeRight(left, right, objectAccessor, context);
                 }
                 if (!result) {
