@@ -5,6 +5,8 @@ Store.js
 Store.js is a super lightweight implementation of Repository_ pattern for relational data and aggregates.
 The library allows you to use Domain-Driven Design (DDD) on client-side as well as reactive programming.
 
+This is similar to Object-Relational Mapping (ORM) for JavaScript, including the Data Mapper pattern (the data can be mapped between objects and a persistent data storage).
+
 
 Canonical repo
 --------------
