@@ -10,6 +10,8 @@ Welcome to Store.js' documentation!
 Store.js is a super lightweight implementation of Repository_ pattern for relational data and aggregates.
 The library allows you to use Domain-Driven Design (DDD) on client-side as well as reactive programming.
 
+This is similar to Object-Relational Mapping (ORM) for JavaScript, including the Data Mapper pattern (the data can be mapped between objects and a persistent data storage).
+
 
 Canonical repo
 --------------
@@ -920,7 +922,7 @@ Alternatives, related and useful links
 - `Dojo1 Store <https://dojotoolkit.org/reference-guide/1.10/dojo/store.html>`_ - \
   Dojo1 implementation of `Repository`_ pattern.
 - `JS-Data <http://www.js-data.io/>`_ - \
-  ORM written by JavaScript for relational data. Does not support composite relations.
+  Object-Relational Mapping (ORM) written by JavaScript for relational data. Does not support composite relations.
 - `Normalizr <https://github.com/paularmstrong/normalizr>`_ - \
   Normalizes (decomposes) nested JSON according to a schema.
 - `Denormalizr <https://github.com/gpbl/denormalizr>`_ - \
