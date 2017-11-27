@@ -32,7 +32,7 @@ define(function() {
         if (!pkAccessor) {
             pkAccessor = function(o) { return o.id; };
         }
-        var pks = objectList.map(pkAccessor);
+        var pks = Array.prototype.map.call(objectList, pkAccessor);
         pks = Array.apply(Array(), pks);
         return JSON.stringify(pks) === JSON.stringify(expectedPks);
     }
@@ -42,7 +42,7 @@ define(function() {
         if (!pkAccessor) {
             pkAccessor = function(o) { return o.id; };
         }
-        var pks = objectList.map(pkAccessor).sort();
+        var pks = Array.prototype.map.call(objectList, pkAccessor).sort();
         pks = Array.apply(Array(), pks);
         expectedPks = expectedPks.sort();
         return JSON.stringify(pks) === JSON.stringify(expectedPks);

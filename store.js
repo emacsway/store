@@ -1313,9 +1313,10 @@ define(['./polyfill'], function() {
                     var relatedQueryResult = relatedStore.find(relatedQuery);
                     return when(relatedQueryResult, function(relatedQueryResult) {
                         var orClause = relatedQueryResult.map(function(obj) { return relation.getQuery(obj); });
-                        // FIXME: remove duplicates from orClause for case of o2m
+                        // TODO: remove duplicates from orClause for case of o2m?
                         owner._subjects.push(orClause);
-                        // return {'$or': orClause};
+                        return {'$or': orClause};
+                        /*
                         owner._subjects.push(relatedQueryResult);
                         var makeOrClause = function () {
                             var orQuery = [];
@@ -1342,6 +1343,7 @@ define(['./polyfill'], function() {
                         };
                         relatedQueryResult.observe = deco(relatedQueryResult.observe);
                         return query;
+                        */
                     });
                 }
             }
@@ -1766,7 +1768,7 @@ define(['./polyfill'], function() {
                             objectList = self._localReproducers[i](objectList);
                         }
                         self._setState(objectList);
-                        self.observed().notify('add', obj, index);
+                        self.observed().notify('add', obj, self.indexOf(obj));
                     }
                 }
             };
@@ -1774,7 +1776,8 @@ define(['./polyfill'], function() {
         _getDeleteObserver: function() {
             var self = this;
             return function(aspect, obj, index) {
-                var index = self.indexOf(obj);
+                if (typeof index === "undefined") { index = self.indexOf(obj); }
+                assert(index === self.indexOf(obj));
                 if (index !== -1) {
                     self._initObjectList.splice(self._initObjectList.indexOf(obj), 1);
                     Array.prototype.splice.call(self, index, 1);
@@ -1964,11 +1967,14 @@ define(['./polyfill'], function() {
             }
             return this._mapping[key];
         },
+        update: function(obj) {
+            var key = this._getKey(obj);
+            var mappedObj = this._mapping[key];
+            clone(this._map(obj), mappedObj);
+        },
         del: function(obj) {
             var key = this._getKey(obj);
-            if (key in this._mapping) {
-                delete this._mapping[key];
-            }
+            delete this._mapping[key];
         },
         _getKey: function(obj) {
             if (obj && typeof obj === "object") {
@@ -2000,9 +2006,10 @@ define(['./polyfill'], function() {
         _getUpdateObserver: function() {
             var self = this;
             return function(aspect, obj, old) {
-                var mappedOld = self._mapping.get(obj);  // get by objId
-                self._mapping.del(obj);
-                var mappedObj = self._mapping.get(obj);  // Create again.
+                var mappedObj = self._mapping.get(obj);
+                var mappedOld = {};
+                clone(mappedObj, mappedOld);
+                self._mapping.update(obj);
                 SubResult.prototype._getUpdateObserver.call(self).call(this, aspect, mappedObj, mappedOld);
             };
         },
