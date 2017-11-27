@@ -3157,6 +3157,7 @@ define(['./polyfill'], function() {
         destination = typeof destination !== "undefined" ? destination : new source.constructor();
         for (var i in source) {
             if (source.hasOwnProperty(i)) {
+                if (['__id', '__oid'].indexOf(source[i]) !== -1) continue;
                 setter(destination, i, source[i]);
             }
         }
