@@ -254,7 +254,7 @@ define(['../store', './utils'], function(store, utils) {
         // update
         observer.args = [];
         var post = postStore.get(7);
-        post.title = 'tl1'
+        post.title = 'tl1';
         postStore.getLocalStore().update(post);
         assert(expectOrderedPks(r1, [4, 3, 2, 1]));
         assert(r1.length = 4);
@@ -281,7 +281,7 @@ define(['../store', './utils'], function(store, utils) {
         // update 3
         observer.args = [];
         var post = postStore.get(7);
-        post.title = 'tl7'
+        post.title = 'tl7';
         postStore.getLocalStore().update(post);
         assert(expectOrderedPks(r1, [3, 2, 1]));
         assert(r1.length = 3);

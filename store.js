@@ -1146,7 +1146,7 @@ define(['./polyfill'], function() {
                 },
                 visit: function(owner, left, right, query) {
                     for (var i = 0; i < right.length; i++) {
-                        right[i] = owner._walkQuery(right[i]);
+                        owner._walkQuery(right[i]);
                     }
                 }
             },
@@ -1155,7 +1155,7 @@ define(['./polyfill'], function() {
                     return isPlainObject(right) && !(right instanceof Array);
                 },
                 visit: function(owner, left, right, query) {
-                    query[left] = owner._walkQuery(right);
+                    owner._walkQuery(right);
                 }
             },
             promisedOperand: {
@@ -1189,10 +1189,9 @@ define(['./polyfill'], function() {
                     }
                 }
             }
-            return query;
         },
         _walkQueryPromisable: function(query) {
-            query = this._walkQuery(query);
+            this._walkQuery(query);
             if (this._promises.length) {
                 return Promise.all(this._promises).then(function() {
                     // Handle the query again?
@@ -1405,19 +1404,6 @@ define(['./polyfill'], function() {
         compute: function() {
             this._walkQuery(this._query);
             return this._getObjectList();
-        },
-        _walkQuery: function(query) {
-            for (var i = 0; i < this._activeVisitors.length; i++) {
-                var visitor = this._visitors[this._activeVisitors[i]];
-                for (var left in query) {  // Don't need to clone
-                    if (left === "__id") continue;
-                    var right = query[left];
-                    if (visitor.accept(this, left, right)) {
-                        visitor.visit(this, left, right, query);
-                    }
-                }
-            }
-            return query;
         },
         _findBestIndex: function() {
             var indexes = [];
