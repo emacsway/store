@@ -814,7 +814,7 @@ define(['./polyfill'], function() {
                 var right = query[left];
                 if (this.has(left)) {
                     result = result && this.get(left).call(this, right, objectAccessor, context);
-                } else {
+                } else if (left !== "__id") {
                     result = result && this._executeRight(left, right, objectAccessor, context);
                 }
                 if (!result) {
@@ -855,7 +855,7 @@ define(['./polyfill'], function() {
     }, {indexable: true});
     simpleQueryEngine.register('$and', function(operands, objectAccessor, obj) {
         var result = true;
-        for (var i in operands) {
+        for (var i = 0; i < operands.length; i++) {
             result = result && this.execute(operands[i], objectAccessor, obj);
             if (!result) {
                 return result;
@@ -865,7 +865,7 @@ define(['./polyfill'], function() {
     }, {indexable: true, compound: true});
     simpleQueryEngine.register('$or', function(operands, objectAccessor, obj) {
         var result = false;
-        for (var i in operands) {
+        for (var i = 0; i < operands.length; i++) {
             result = result || this.execute(operands[i], objectAccessor, obj);
             if (result) {
                 return result;
@@ -1145,9 +1145,9 @@ define(['./polyfill'], function() {
                     return right instanceof Array && owner._queryEngine.isCompound(left);
                 },
                 visit: function(owner, left, right, query) {
-                    query[left] = right.map(function(el) {
-                        return owner._walkQuery(el);
-                    });
+                    for (var i = 0; i < right.length; i++) {
+                        owner._walkQuery(right[i]);
+                    }
                 }
             },
             nestedQuery: {
@@ -1155,7 +1155,7 @@ define(['./polyfill'], function() {
                     return isPlainObject(right) && !(right instanceof Array);
                 },
                 visit: function(owner, left, right, query) {
-                    query[left] = owner._walkQuery(right);
+                    owner._walkQuery(right);
                 }
             },
             promisedOperand: {
@@ -1182,16 +1182,16 @@ define(['./polyfill'], function() {
             for (var i = 0; i < this._activeVisitors.length; i++) {
                 var visitor = this._visitors[this._activeVisitors[i]];
                 for (var left in clone(query, {})) {
+                    if (left === "__id") continue;
                     var right = query[left];
                     if (visitor.accept(this, left, right)) {
                         visitor.visit(this, left, right, query);
                     }
                 }
             }
-            return query;
         },
         _walkQueryPromisable: function(query) {
-            query = this._walkQuery(query);
+            this._walkQuery(query);
             if (this._promises.length) {
                 return Promise.all(this._promises).then(function() {
                     // Handle the query again?
@@ -1312,14 +1312,17 @@ define(['./polyfill'], function() {
                     var relatedStore = relation.getRelatedStore();
                     var relatedQueryResult = relatedStore.find(relatedQuery);
                     return when(relatedQueryResult, function(relatedQueryResult) {
+                        var orClause = relatedQueryResult.map(function(obj) { return relation.getQuery(obj); });
+                        // TODO: remove duplicates from orClause for case of o2m?
+                        owner._subjects.push(orClause);
+                        return {'$or': orClause};
+                        /*
                         owner._subjects.push(relatedQueryResult);
-
                         var makeOrClause = function () {
                             var orQuery = [];
                             for (var i = 0; i < relatedQueryResult.length; i++) {
                                 orQuery.push(relation.getQuery(relatedQueryResult[i]));
                             }
-                            // TODO: remove duplicates from orQuery for case of o2m
                             return orQuery;
                         };
                         var disposable;
@@ -1340,6 +1343,7 @@ define(['./polyfill'], function() {
                         };
                         relatedQueryResult.observe = deco(relatedQueryResult.observe);
                         return query;
+                        */
                     });
                 }
             }
@@ -1402,18 +1406,6 @@ define(['./polyfill'], function() {
         compute: function() {
             this._walkQuery(this._query);
             return this._getObjectList();
-        },
-        _walkQuery: function(query) {
-            for (var i = 0; i < this._activeVisitors.length; i++) {
-                var visitor = this._visitors[this._activeVisitors[i]];
-                for (var left in query) {  // Don't need to clone
-                    var right = query[left];
-                    if (visitor.accept(this, left, right)) {
-                        visitor.visit(this, left, right, query);
-                    }
-                }
-            }
-            return query;
         },
         _findBestIndex: function() {
             var indexes = [];
@@ -1740,7 +1732,7 @@ define(['./polyfill'], function() {
             }
             return this;
         },
-        _getAddObserver: function() {  // TODO: Now we are able to support .map()
+        _getAddObserver: function() {
             var self = this;
             return function(aspect, obj, index) {
                 if (self.indexOf(obj) !== -1) { return; }
@@ -1776,7 +1768,7 @@ define(['./polyfill'], function() {
                             objectList = self._localReproducers[i](objectList);
                         }
                         self._setState(objectList);
-                        self.observed().notify('add', obj, index);
+                        self.observed().notify('add', obj, self.indexOf(obj));
                     }
                 }
             };
@@ -1784,7 +1776,8 @@ define(['./polyfill'], function() {
         _getDeleteObserver: function() {
             var self = this;
             return function(aspect, obj, index) {
-                var index = self.indexOf(obj);
+                if (typeof index === "undefined") { index = self.indexOf(obj); }
+                assert(index === self.indexOf(obj));
                 if (index !== -1) {
                     self._initObjectList.splice(self._initObjectList.indexOf(obj), 1);
                     Array.prototype.splice.call(self, index, 1);
@@ -1856,6 +1849,19 @@ define(['./polyfill'], function() {
                 Array.prototype.slice.apply(this, arguments)
             );
         },
+        map: function(callback, thisArg) {
+            var self = this;
+            return new MappedResult(
+                this,
+                function() {
+                    return self.toArray();
+                },
+                function(obj) { return true; },
+                self.toArray(),
+                [],
+                new _Mapping(callback)
+            );
+        },
         forEach: function(callback, thisArg) {  // Do not change signature of parent class
             Array.prototype.forEach.apply(this, arguments);
             this._disposable = this._disposable.add(
@@ -1921,7 +1927,7 @@ define(['./polyfill'], function() {
     SubResult.prototype = clone({
         constructor: SubResult,
         observe: function(enable) {
-            if (enable) {
+            if (enable !== false) {
                 this._subject.observe(enable);
             }
             return Result.prototype.observe.call(this, enable);
@@ -1934,17 +1940,87 @@ define(['./polyfill'], function() {
     }
     PartialResult.prototype = clone({
         constructor: PartialResult,
-        _getAddObserver: Result.prototype._getBroadObserver,
+        _getAddObserver: SubResult.prototype._getBroadObserver,
         _getUpdateObserver: function() {
             var self = this;
             return function(aspect, obj, old) {
-                SubResult.prototype._getUpdateObserver().apply(this, arguments);
+                SubResult.prototype._getUpdateObserver.call(self).apply(this, arguments);
                 if (self.indexOf(obj) !== -1) {
                     self.observed().notify('update', obj, old);
                 }
             };
         },
-        _getDeleteObserver: Result.prototype._getBroadObserver
+        _getDeleteObserver: SubResult.prototype._getBroadObserver
+    }, Object.create(SubResult.prototype));
+
+
+    function _Mapping(map) {
+        this._map = map;
+        this._mapping = {};
+    }
+    _Mapping.prototype = {
+        constructor: _Mapping,
+        get: function(obj) {
+            var key = this._getKey(obj);
+            if (!(key in this._mapping)) {
+                this._mapping[key] = this._map(obj);
+            }
+            return this._mapping[key];
+        },
+        update: function(obj) {
+            var key = this._getKey(obj);
+            var mappedObj = this._mapping[key];
+            clone(this._map(obj), mappedObj);
+        },
+        del: function(obj) {
+            var key = this._getKey(obj);
+            delete this._mapping[key];
+        },
+        _getKey: function(obj) {
+            if (obj && typeof obj === "object") {
+                return getId(obj);
+            }
+            return obj;
+        }
+    };
+
+
+    function MappedResult(subject, reproducer, filter, objectList, relatedSubjects, mapping) {
+        var self = this;
+        this._mapping = mapping;
+        var mappedReproducer = function() {
+            return Array.prototype.map.call(reproducer(), function(obj) { return self._mapping.get(obj); });
+        };
+        var mappedObjectList = Array.prototype.map.call(objectList, function(obj) { return self._mapping.get(obj); });
+        SubResult.call(this, subject, mappedReproducer, filter, mappedObjectList, relatedSubjects);
+    }
+    MappedResult.prototype = clone({
+        constructor: MappedResult,
+        _getAddObserver: function() {
+            var self = this;
+            return function(aspect, obj, index) {
+                var mappedObj = self._mapping.get(obj);
+                SubResult.prototype._getAddObserver.call(self).call(this, aspect, mappedObj, index);
+            };
+        },
+        _getUpdateObserver: function() {
+            var self = this;
+            return function(aspect, obj, old) {
+                var mappedObj = self._mapping.get(obj);
+                var mappedOld = {};
+                clone(mappedObj, mappedOld);
+                self._mapping.update(obj);
+                SubResult.prototype._getUpdateObserver.call(self).call(this, aspect, mappedObj, mappedOld);
+            };
+        },
+        _getDeleteObserver: function() {
+            var self = this;
+            return function(aspect, obj, index) {
+                var mappedObj = self._mapping.get(obj);
+                self._mapping.del(obj);
+                SubResult.prototype._getDeleteObserver.call(self).call(this, aspect, mappedObj, index);
+            };
+        }
     }, Object.create(SubResult.prototype));
 
 
