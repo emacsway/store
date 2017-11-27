@@ -1265,16 +1265,6 @@ define(['./polyfill'], function() {
                     delete query[left];
                     var relation = owner._store.getRelation(left);
                     clone(relation.getQuery(right), query);
-                    /*
-                    var relatedField = relation.getRelatedField();
-                    var relatedValue = relation.getRelatedValue(right);
-                    var rightPart = {};
-                    for (var i = 0; i < relatedField.length; i++) {
-                        rightPart[relatedField[i]] = relatedValue[i];
-                    }
-                    right = {'$rel': rightPart};
-                    query[left] = right;
-                    */
                 }
             },
             emulatedRelation: {
@@ -1316,34 +1306,6 @@ define(['./polyfill'], function() {
                         // TODO: remove duplicates from orClause for case of o2m?
                         owner._subjects.push(orClause);
                         return {'$or': orClause};
-                        /*
-                        owner._subjects.push(relatedQueryResult);
-                        var makeOrClause = function () {
-                            var orQuery = [];
-                            for (var i = 0; i < relatedQueryResult.length; i++) {
-                                orQuery.push(relation.getQuery(relatedQueryResult[i]));
-                            }
-                            return orQuery;
-                        };
-                        var disposable;
-                        var query = {'$or': makeOrClause()};
-
-                        var deco = function(func) {
-                            return function(enable) {
-                                var result = func.call(this, enable);
-                                if (enable === false) {
-                                    disposable.dispose();
-                                } else {
-                                    disposable = this.observed().attach(['add', 'update', 'delete'], function(aspect, obj) {
-                                        query['$or'] = makeOrClause(); // Immutable query and functional walker are impossible!
-                                    });
-                                }
-                                return result;
-                            };
-                        };
-                        relatedQueryResult.observe = deco(relatedQueryResult.observe);
-                        return query;
-                        */
                     });
                 }
             }
@@ -1712,15 +1674,6 @@ define(['./polyfill'], function() {
                 this._disposable = this._disposable.add(
                     this._subject.observed().attach(['delete'], this._getDeleteObserver())
                 );
-                /* this._disposable = this._disposable.add(
-                    this._subject.observed().attach(['add', 'update', 'delete'], this._getBroadObserver())
-                );
-                this._disposable = this._disposable.add(
-                    this._subject.observed().attach('update', function(aspect, obj, old) {
-                    if (self.indexOf(obj) !== -1) {
-                        self.observed().notify('update', obj, old);
-                    }
-                })); */
 
                 for (var i = 0; i < self._relatedSubjects.length; i++) {
                     this._disposable = this._disposable.add(
