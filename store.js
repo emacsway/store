@@ -814,7 +814,7 @@ define(['./polyfill'], function() {
                 var right = query[left];
                 if (this.has(left)) {
                     result = result && this.get(left).call(this, right, objectAccessor, context);
-                } else {
+                } else if (left !== "__id") {
                     result = result && this._executeRight(left, right, objectAccessor, context);
                 }
                 if (!result) {
@@ -855,7 +855,7 @@ define(['./polyfill'], function() {
     }, {indexable: true});
     simpleQueryEngine.register('$and', function(operands, objectAccessor, obj) {
         var result = true;
-        for (var i in operands) {
+        for (var i = 0; i < operands.length; i++) {
             result = result && this.execute(operands[i], objectAccessor, obj);
             if (!result) {
                 return result;
@@ -865,7 +865,7 @@ define(['./polyfill'], function() {
     }, {indexable: true, compound: true});
     simpleQueryEngine.register('$or', function(operands, objectAccessor, obj) {
         var result = false;
-        for (var i in operands) {
+        for (var i = 0; i < operands.length; i++) {
             result = result || this.execute(operands[i], objectAccessor, obj);
             if (result) {
                 return result;
@@ -1145,9 +1145,9 @@ define(['./polyfill'], function() {
                     return right instanceof Array && owner._queryEngine.isCompound(left);
                 },
                 visit: function(owner, left, right, query) {
-                    query[left] = right.map(function(el) {
-                        return owner._walkQuery(el);
-                    });
+                    for (var i = 0; i < right.length; i++) {
+                        right[i] = owner._walkQuery(right[i]);
+                    }
                 }
             },
             nestedQuery: {
@@ -1182,6 +1182,7 @@ define(['./polyfill'], function() {
             for (var i = 0; i < this._activeVisitors.length; i++) {
                 var visitor = this._visitors[this._activeVisitors[i]];
                 for (var left in clone(query, {})) {
+                    if (left === "__id") continue;
                     var right = query[left];
                     if (visitor.accept(this, left, right)) {
                         visitor.visit(this, left, right, query);
@@ -1312,14 +1313,16 @@ define(['./polyfill'], function() {
                     var relatedStore = relation.getRelatedStore();
                     var relatedQueryResult = relatedStore.find(relatedQuery);
                     return when(relatedQueryResult, function(relatedQueryResult) {
+                        var orClause = relatedQueryResult.map(function(obj) { return relation.getQuery(obj); });
+                        // FIXME: remove duplicates from orClause for case of o2m
+                        owner._subjects.push(orClause);
+                        // return {'$or': orClause};
                         owner._subjects.push(relatedQueryResult);
-
                         var makeOrClause = function () {
                             var orQuery = [];
                             for (var i = 0; i < relatedQueryResult.length; i++) {
                                 orQuery.push(relation.getQuery(relatedQueryResult[i]));
                             }
-                            // TODO: remove duplicates from orQuery for case of o2m
                             return orQuery;
                         };
                         var disposable;
@@ -1407,6 +1410,7 @@ define(['./polyfill'], function() {
             for (var i = 0; i < this._activeVisitors.length; i++) {
                 var visitor = this._visitors[this._activeVisitors[i]];
                 for (var left in query) {  // Don't need to clone
+                    if (left === "__id") continue;
                     var right = query[left];
                     if (visitor.accept(this, left, right)) {
                         visitor.visit(this, left, right, query);
@@ -1740,7 +1744,7 @@ define(['./polyfill'], function() {
             }
             return this;
         },
-        _getAddObserver: function() {  // TODO: Now we are able to support .map()
+        _getAddObserver: function() {
             var self = this;
             return function(aspect, obj, index) {
                 if (self.indexOf(obj) !== -1) { return; }
@@ -1934,7 +1938,7 @@ define(['./polyfill'], function() {
     SubResult.prototype = clone({
         constructor: SubResult,
         observe: function(enable) {
-            if (enable) {
+            if (enable !== false) {
                 this._subject.observe(enable);
             }
             return Result.prototype.observe.call(this, enable);
@@ -1993,9 +1997,9 @@ define(['./polyfill'], function() {
         var self = this;
         this._mapping = mapping;
         var mappedReproducer = function() {
-            return reproducer().map(function(obj) { return self._mapping.get(obj); });
+            return Array.prototype.map.call(reproducer(), function(obj) { return self._mapping.get(obj); });
         };
-        var mappedObjectList = objectList.map(function(obj) { return self._mapping.get(obj); });
+        var mappedObjectList = Array.prototype.map.call(objectList, function(obj) { return self._mapping.get(obj); });
         SubResult.call(this, subject, mappedReproducer, filter, mappedObjectList, relatedSubjects);
     }
     MappedResult.prototype = clone({
