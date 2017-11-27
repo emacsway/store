@@ -2007,8 +2007,7 @@ define(['./polyfill'], function() {
             var self = this;
             return function(aspect, obj, old) {
                 var mappedObj = self._mapping.get(obj);
-                var mappedOld = {};
-                clone(mappedObj, mappedOld);
+                var mappedOld = clone(mappedObj);
                 self._mapping.update(obj);
                 SubResult.prototype._getUpdateObserver.call(self).call(this, aspect, mappedObj, mappedOld);
             };
