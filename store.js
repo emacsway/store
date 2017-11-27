@@ -1856,6 +1856,19 @@ define(['./polyfill'], function() {
                 Array.prototype.slice.apply(this, arguments)
             );
         },
+        map: function(callback, thisArg) {
+            var self = this;
+            return new MappedResult(
+                this,
+                function() {
+                    return self.toArray();
+                },
+                function(obj) { return true; },
+                self.toArray(),
+                [],
+                new _Mapping(callback)
+            );
+        },
         forEach: function(callback, thisArg) {  // Do not change signature of parent class
             Array.prototype.forEach.apply(this, arguments);
             this._disposable = this._disposable.add(
@@ -1934,17 +1947,83 @@ define(['./polyfill'], function() {
     }
     PartialResult.prototype = clone({
         constructor: PartialResult,
-        _getAddObserver: Result.prototype._getBroadObserver,
+        _getAddObserver: SubResult.prototype._getBroadObserver,
         _getUpdateObserver: function() {
             var self = this;
             return function(aspect, obj, old) {
-                SubResult.prototype._getUpdateObserver().apply(this, arguments);
+                SubResult.prototype._getUpdateObserver.call(self).apply(this, arguments);
                 if (self.indexOf(obj) !== -1) {
                     self.observed().notify('update', obj, old);
                 }
             };
         },
-        _getDeleteObserver: Result.prototype._getBroadObserver
+        _getDeleteObserver: SubResult.prototype._getBroadObserver
+    }, Object.create(SubResult.prototype));
+
+
+    function _Mapping(map) {
+        this._map = map;
+        this._mapping = {};
+    }
+    _Mapping.prototype = {
+        constructor: _Mapping,
+        get: function(obj) {
+            var key = this._getKey(obj);
+            if (!(key in this._mapping)) {
+                this._mapping[key] = this._map(obj);
+            }
+            return this._mapping[key];
+        },
+        del: function(obj) {
+            var key = this._getKey(obj);
+            if (key in this._mapping) {
+                delete this._mapping[key];
+            }
+        },
+        _getKey: function(obj) {
+            if (obj && typeof obj === "object") {
+                return getId(obj);
+            }
+            return obj;
+        }
+    };
+
+
+    function MappedResult(subject, reproducer, filter, objectList, relatedSubjects, mapping) {
+        var self = this;
+        this._mapping = mapping;
+        var mappedReproducer = function() {
+            return reproducer().map(function(obj) { return self._mapping.get(obj); });
+        };
+        var mappedObjectList = objectList.map(function(obj) { return self._mapping.get(obj); });
+        SubResult.call(this, subject, mappedReproducer, filter, mappedObjectList, relatedSubjects);
+    }
+    MappedResult.prototype = clone({
+        constructor: MappedResult,
+        _getAddObserver: function() {
+            var self = this;
+            return function(aspect, obj, index) {
+                var mappedObj = self._mapping.get(obj);
+                SubResult.prototype._getAddObserver.call(self).call(this, aspect, mappedObj, index);
+            };
+        },
+        _getUpdateObserver: function() {
+            var self = this;
+            return function(aspect, obj, old) {
+                var mappedOld = self._mapping.get(obj);  // get by objId
+                self._mapping.del(obj);
+                var mappedObj = self._mapping.get(obj);  // Create again.
+                SubResult.prototype._getUpdateObserver.call(self).call(this, aspect, mappedObj, mappedOld);
+            };
+        },
+        _getDeleteObserver: function() {
+            var self = this;
+            return function(aspect, obj, index) {
+                var mappedObj = self._mapping.get(obj);
+                self._mapping.del(obj);
+                SubResult.prototype._getDeleteObserver.call(self).call(this, aspect, mappedObj, index);
+            };
+        }
     }, Object.create(SubResult.prototype));
 
 
