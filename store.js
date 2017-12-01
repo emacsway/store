@@ -146,6 +146,9 @@ define(['./polyfill'], function() {
         },
         syncDependencies: function(obj, old) {
         },
+        addIndex: function(index) {
+            return this._localStore.addIndex(index);
+        },
         decompose: function(record) {
             record = this.restoreInstance(record);
             return this._localStore.add(record);
@@ -434,6 +437,7 @@ define(['./polyfill'], function() {
         },
         getRequiredIndexes: function() {
             var indexes = __super__(RelationalStoreAspect, this).getRequiredIndexes.call(this).slice();
+            if (!this.relations) { return indexes; } // Called from CompositeStore()
             for (var relationName in this.relations.foreignKey) {
                 var fields = this.relations.foreignKey[relationName].getField();
                 for (var i = 0; i < fields.length; i++) {
@@ -630,9 +634,9 @@ define(['./polyfill'], function() {
      */
     function Store(options) {
         options || (options = {});
-        ObservableStoreAspect.init.call(this);
-        RelationalStoreAspect.init.call(this, options.relations);
         CompositeStore.call(this, options);
+        RelationalStoreAspect.init.call(this, options.relations);
+        ObservableStoreAspect.init.call(this);
     }
     Store.prototype = clone({
         constructor: Store
@@ -3235,11 +3239,11 @@ define(['./polyfill'], function() {
             return delegate;
         };
         wrapped.init = function() {
-            if (aspect.init) {
-                aspect.init.apply(this, Array.prototype.slice.call(selfArguments, 2));
-            }
             if (delegate.init) {
                 delegate.init.call(this);
+            }
+            if (aspect.init) {
+                aspect.init.apply(this, Array.prototype.slice.call(selfArguments, 2));
             }
             return this;
         };
