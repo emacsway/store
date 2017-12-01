@@ -1447,7 +1447,7 @@ define(['./polyfill'], function() {
                 var relatedStore = relation.getRelatedStore();
                 var relatedQueryResult = relatedStore.find(relation.getRelatedQuery(self._obj));
                 return when(relatedQueryResult, function(relatedQueryResult) {
-                    self._obj[relationName] = relatedQueryResult;
+                    self._store.getObjectAccessor().setValue(self._obj, relationName, relatedQueryResult);
                     return whenIter(relatedQueryResult, function(relatedObj) {
                         return self._handleRelatedObj(relatedStore, relatedObj);
                     });
@@ -1463,9 +1463,10 @@ define(['./polyfill'], function() {
             return whenIter(keys(this._store.relations.manyToMany), function(relationName) {
                 var m2mRelation = self._store.relations.manyToMany[relationName];
                 var relatedStore = m2mRelation.getRelatedStore();
-                var relatedQueryResult = self._obj[relationName] = relatedStore.find(m2mRelation.getRelatedQuery(self._obj));
+                var relatedQueryResult = relatedStore.find(m2mRelation.getRelatedQuery(self._obj));
+                self._store.getObjectAccessor().setValue(self._obj, relationName, relatedQueryResult);
                 return when(relatedQueryResult, function(relatedQueryResult) {
-                    self._obj[relationName] = relatedQueryResult;
+                    self._store.getObjectAccessor().setValue(self._obj, relationName, relatedQueryResult);
                     return whenIter(relatedQueryResult, function(relatedObj) {
                         return self._handleRelatedObj(relatedStore, relatedObj);
                     });
@@ -1499,11 +1500,11 @@ define(['./polyfill'], function() {
             return whenIter(keys(this._store.relations.foreignKey), function(relationName) {
                 var relation = self._store.relations.foreignKey[relationName];
                 var relatedStore = relation.getRelatedStore();
-                var relatedObj = self._obj[relationName];
+                var relatedObj = self._store.getObjectAccessor().getValue(self._obj, relationName);
                 if (relatedObj && typeof relatedObj === "object") {
                     self._setForeignKeyToRelatedObj(relatedObj, relation.getRelatedRelation(), self._obj);
                     return when(self._handleRelatedObj(relatedStore, relatedObj), function(relatedObj) {
-                        self._obj[relationName] = relatedObj;
+                        self._store.getObjectAccessor().setValue(self._obj, relationName, relatedObj);
                     });
                 }
             });
@@ -1516,7 +1517,7 @@ define(['./polyfill'], function() {
                 }
                 var relation = self._store.relations.oneToMany[relationName];
                 var relatedStore = relation.getRelatedStore();
-                var relatedObjectList = self._obj[relationName] || [];
+                var relatedObjectList = self._store.getObjectAccessor().getValue(self._obj, relationName) || [];
                 return whenIter(relatedObjectList, function(relatedObj, i) {
                     self._setForeignKeyToRelatedObj(self._obj, relation, relatedObj);
                     return when(self._handleRelatedObj(relatedStore, relatedObj), function(relatedObj) {
@@ -1554,7 +1555,7 @@ define(['./polyfill'], function() {
             return whenIter(keys(this._store.relations.manyToMany), function(relationName) {
                 var m2mRelation = self._store.relations.manyToMany[relationName];
                 var relatedStore = m2mRelation.getRelatedStore();
-                var relatedObjectList = self._obj[relationName] || [];
+                var relatedObjectList = self._store.getObjectAccessor().getValue(self._obj, relationName) || [];
                 return whenIter(relatedObjectList, function(relatedObj, i) {
                     return when(self._handleRelatedObj(relatedStore, relatedObj), function(relatedObj) {
                         relatedObjectList[i] = relatedObj;
@@ -1574,11 +1575,11 @@ define(['./polyfill'], function() {
             var m2mObject = {};
             var toRelatedField = relatedRelation.getRelatedField();
             for (var i = 0; i < toRelatedField.length; i++) {
-                m2mObject[toRelatedField[i]] = relatedValue[i];
+                m2mStore.getObjectAccessor().setValue(m2mObject, toRelatedField[i], relatedValue[i]);
             }
             var fromRelatedField = relation.getRelatedField();
             for (var i = 0; i < fromRelatedField.length; i++) {
-                m2mObject[fromRelatedField[i]] = value[i];
+                m2mStore.getObjectAccessor().setValue(m2mObject, fromRelatedField[i], value[i]);
             }
             var query = clone(relation.getRelatedQuery(this._obj),
                               relatedRelation.getRelatedQuery(relatedObj));
