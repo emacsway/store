@@ -9,42 +9,54 @@ define(['../store', './utils'], function(store, utils) {
     function testManyToMany(resolve, reject) {
         var registry = new store.Registry();
 
-        var tagStore = new store.Store(['id', 'lang'], ['slug'], {}, new store.DummyStore());
+        var tagStore = new store.Store({
+            pk: ['id', 'lang'],
+            indexes: ['slug'],
+            remoteStore: new store.DummyStore()
+        });
         registry.register('tag', tagStore);
 
-        var tagPostStore = new store.Store('id', [], {
-            foreignKey: {
-                post: {
-                    field: ['postId', 'postLang'],
-                    relatedStore: 'post',
-                    relatedField: ['id', 'lang'],
-                    relatedName: 'tagPostSet',
-                    onDelete: store.cascade
-                },
-                tag: {
-                    field: ['tagId', 'tagLang'],
-                    relatedStore: 'tag',
-                    relatedField: ['id', 'lang'],
-                    relatedName: 'tagPostSet',
-                    onDelete: store.cascade
+        var tagPostStore = new store.Store({
+            relations: {
+                foreignKey: {
+                    post: {
+                        field: ['postId', 'postLang'],
+                        relatedStore: 'post',
+                        relatedField: ['id', 'lang'],
+                        relatedName: 'tagPostSet',
+                        onDelete: store.cascade
+                    },
+                    tag: {
+                        field: ['tagId', 'tagLang'],
+                        relatedStore: 'tag',
+                        relatedField: ['id', 'lang'],
+                        relatedName: 'tagPostSet',
+                        onDelete: store.cascade
+                    }
                 }
-            }
-        }, new store.DummyStore());
+            },
+            remoteStore: new store.DummyStore()
+        });
         tagPostStore.getLocalStore().setNextPk = function(obj) {
             tagPostStore._pkCounter || (tagPostStore._pkCounter = 0);
             this.getObjectAccessor().setPk(obj, ++tagPostStore._pkCounter);
         };
         registry.register('tagPost', tagPostStore);
 
-        var postStore = new store.Store(['id', 'lang'], ['lang', 'slug', 'author'], {
-            manyToMany: {
-                tags: {
-                    relation: 'tagPostSet',
-                    relatedStore: 'tag',
-                    relatedRelation: 'tagPostSet'
+        var postStore = new store.Store({
+            pk: ['id', 'lang'],
+            indexes: ['lang', 'slug', 'author'],
+            relations: {
+                manyToMany: {
+                    tags: {
+                        relation: 'tagPostSet',
+                        relatedStore: 'tag',
+                        relatedRelation: 'tagPostSet'
+                    }
                 }
-            }
-        }, new store.DummyStore());
+            },
+            remoteStore: new store.DummyStore()
+        });
         registry.register('post', postStore);
 
         registry.ready();

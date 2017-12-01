@@ -19,7 +19,11 @@ define(['../store', './utils'], function(store, utils) {
             }
         };
 
-        var postStore = new store.Store('id', ['slug', 'author'], {}, new store.DummyStore(), Post);
+        var postStore = new store.Store({
+            indexes: ['slug', 'author'],
+            remoteStore: new store.DummyStore(),
+            model: Post
+        });
         registry.register('post', postStore);
 
         registry.ready();

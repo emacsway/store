@@ -15,7 +15,7 @@ define(['../../store', '../utils'], function(store, utils) {
                 store.ObservableStoreAspect,
                 store.withAspect(
                     store.RelationalStoreAspect,
-                    new store.MemoryStore('id', ['slug', 'author']),
+                    new store.MemoryStore({indexes: ['slug', 'author']}),
                     {
                         foreignKey: {
                             author: {
@@ -38,7 +38,7 @@ define(['../../store', '../utils'], function(store, utils) {
                 store.ObservableStoreAspect,
                 store.withAspect(
                     store.RelationalStoreAspect,
-                    new store.MemoryStore('id', ['firstName', 'lastName'])
+                    new store.MemoryStore({indexes: ['firstName', 'lastName']})
                 )
             )
         ).init();

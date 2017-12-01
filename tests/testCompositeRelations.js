@@ -10,20 +10,29 @@ define(['../store', './utils'], function(store, utils) {
         var registry = new store.Registry();
 
         // Use reverse order of store creation.
-        var authorStore = new store.Store(['id', 'lang'], ['firstName', 'lastName'], {}, new store.DummyStore());
+        var authorStore = new store.Store({
+            pk: ['id', 'lang'],
+            indexes: ['firstName', 'lastName'],
+            remoteStore: new store.DummyStore()
+        });
         registry.register('author', authorStore);
 
-        var postStore = new store.Store(['id', 'lang'], ['lang', 'slug', 'author'], {
-            foreignKey: {
-                author: {
-                    field: ['author', 'lang'],
-                    relatedStore: 'author',
-                    relatedField: ['id', 'lang'],
-                    relatedName: 'posts',
-                    onDelete: store.cascade
+        var postStore = new store.Store({
+            pk: ['id', 'lang'],
+            indexes: ['lang', 'slug', 'author'],
+            relations: {
+                foreignKey: {
+                    author: {
+                        field: ['author', 'lang'],
+                        relatedStore: 'author',
+                        relatedField: ['id', 'lang'],
+                        relatedName: 'posts',
+                        onDelete: store.cascade
+                    }
                 }
-            }
-        }, new store.DummyStore());
+            },
+            remoteStore: new store.DummyStore()
+        });
         registry.register('post', postStore);
 
         registry.ready();

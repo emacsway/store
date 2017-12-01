@@ -99,20 +99,23 @@ define(['./polyfill'], function() {
     }, Object.create(IStore.prototype));
 
 
-    function CompositeStore(pkOrObjectAccessor, indexesOrLocalStore, remoteStore, modelOrMapper) {
+    function CompositeStore(options) {
         AbstractStore.call(this);
-        pkOrObjectAccessor = pkOrObjectAccessor || 'id';
-        var objectAccessor = pkOrObjectAccessor instanceof ObjectAccessor ? pkOrObjectAccessor : new ObjectAccessor(pkOrObjectAccessor);
-
-        var remoteStore = remoteStore ? remoteStore : (objectAccessor.pk instanceof Array ? new DummyStore(objectAccessor) : new AutoIncrementStore(objectAccessor));
+        options || (options = {});
+        if (!options.objectAccessor) {
+            options.objectAccessor = new ObjectAccessor(options.pk || 'id');
+        }
+        if (!options.mapper) {
+            options.mapper = new Mapper({model: options.model});
+        }
+        var remoteStore = options.remoteStore ? options.remoteStore : (options.objectAccessor.pk instanceof Array ? new DummyStore(options) : new AutoIncrementStore(options));
         this._remoteStore = withAspect(ObservableStoreAspect, remoteStore).init();
 
-        if (indexesOrLocalStore instanceof IStore) {
-            this._localStore = indexesOrLocalStore;
+        if (options.localStore) {
+            this._localStore = options.localStore;
         } else {
-            var indexes = indexesOrLocalStore;
-            indexes = indexes.concat(this.getRequiredIndexes());
-            this._localStore = withAspect(ObservableStoreAspect, new MemoryStore(objectAccessor, indexes, modelOrMapper)).init();
+            options.indexes = (options.indexes || []).concat(this.getRequiredIndexes());
+            this._localStore = withAspect(ObservableStoreAspect, new MemoryStore(options)).init();
         }
     }
     CompositeStore.prototype = clone({
@@ -625,11 +628,11 @@ define(['./polyfill'], function() {
      * This class implements the pattern Repository:
      * http://martinfowler.com/eaaCatalog/repository.html
      */
-    function Store(pkOrObjectAccessor, indexesOrLocalStore, relations, remoteStore, model) {
-        indexesOrLocalStore || (indexesOrLocalStore = []);
+    function Store(options) {
+        options || (options = {});
         ObservableStoreAspect.init.call(this);
-        RelationalStoreAspect.init.call(this, relations, indexesOrLocalStore);
-        CompositeStore.call(this, pkOrObjectAccessor, indexesOrLocalStore, remoteStore, model);
+        RelationalStoreAspect.init.call(this, options.relations);
+        CompositeStore.call(this, options);
     }
     Store.prototype = clone({
         constructor: Store
@@ -1978,17 +1981,11 @@ define(['./polyfill'], function() {
     }, Object.create(SubResult.prototype));
 
 
-    function AbstractLeafStore(pkOrObjectAccessor, modelOrMapper) {
+    function AbstractLeafStore(options) {
         AbstractStore.call(this);
-        if (!modelOrMapper) {
-            this._mapper = new Mapper();
-        } else if (modelOrMapper instanceof Mapper) {
-            this._mapper = modelOrMapper;
-        } else {
-            this._mapper = new Mapper({model: modelOrMapper});
-        }
-        pkOrObjectAccessor = pkOrObjectAccessor || 'id';
-        this._objectAccessor = pkOrObjectAccessor instanceof ObjectAccessor ? pkOrObjectAccessor : new ObjectAccessor(pkOrObjectAccessor);
+        options || (options = {});
+        this._objectAccessor = options.objectAccessor ? options.objectAccessor : new ObjectAccessor(options.pk || 'id');
+        this._mapper = options.mapper ? options.mapper : new Mapper({model: options.model});
         this._objectStateMapping = {};
     }
     AbstractLeafStore.prototype = clone({
@@ -2100,13 +2097,14 @@ define(['./polyfill'], function() {
     }, Object.create(AbstractStore.prototype));
 
 
-    function MemoryStore(pkOrObjectAccessor, indexes, modelOrMapper) {
+    function MemoryStore(options) {
         var self = this;
-        AbstractLeafStore.call(this, pkOrObjectAccessor, modelOrMapper);
+        options || (options = {});
+        AbstractLeafStore.call(this, options);
         this.objectList = [];
         this.pkIndex = {};
         this.indexes = {};
-        indexes || (indexes = []);
+        var indexes = options.indexes || [];
         indexes = indexes.concat(this.getRequiredIndexes());
         indexes.forEach(function(index) {
             self.addIndex(index);
@@ -2228,8 +2226,8 @@ define(['./polyfill'], function() {
 
 
     function RestStore(options) {
-        options = options || {};
-        AbstractLeafStore.call(this, options.objectAccessor || options.pk, options.mapper || options.model);
+        options || (options = {});
+        AbstractLeafStore.call(this, options);
         this._url = options.url;
         this._jQuery = options.jQuery || window.jQuery;
         this._requestOptions = options.requestOptions || {};
@@ -2352,16 +2350,16 @@ define(['./polyfill'], function() {
     }, Object.create(AbstractLeafStore.prototype));
 
 
-    function DummyStore(pk) {
-        AbstractLeafStore.call(this, pk);
+    function DummyStore(options) {
+        AbstractLeafStore.call(this, options);
     }
     DummyStore.prototype = clone({
         constructor: DummyStore
     }, Object.create(AbstractLeafStore.prototype));
 
 
-    function AutoIncrementStore(pk) {
-        DummyStore.call(this, pk);
+    function AutoIncrementStore(options) {
+        DummyStore.call(this, options);
         this._counter = 0;
     }
     AutoIncrementStore.prototype = clone({

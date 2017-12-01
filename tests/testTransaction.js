@@ -12,10 +12,10 @@ define(['../store', './utils'], function(store, utils) {
         var authorEndpoint = [];
         var postEndpoint = [];
 
-        function TestStore(counter, endpoint, pk) {
-            store.DummyStore.call(this, pk);
-            this._endpoint = endpoint;
-            this._counter = counter;
+        function TestStore(options) {
+            store.DummyStore.call(this, options);
+            this._endpoint = options.endpoint;
+            this._counter = options.counter;
         }
         TestStore.prototype = store.clone({
             constructor: TestStore,
@@ -47,20 +47,39 @@ define(['../store', './utils'], function(store, utils) {
         }
 
 
-        var authorStore = new store.Store(['id', 'lang'], ['firstName', 'lastName'], {}, new TestStore(10, authorEndpoint, ['id', 'lang']), Author);
+        var authorStore = new store.Store({
+            pk: ['id', 'lang'],
+            indexes: ['firstName', 'lastName'],
+            remoteStore: new TestStore({
+                pk: ['id', 'lang'],
+                counter: 10,
+                endpoint: authorEndpoint
+            }),
+            model: Author
+        });
         registry.register('author', authorStore);
 
-        var postStore = new store.Store(['id', 'lang'], ['lang', 'slug', 'author'], {
-            foreignKey: {
-                author: {
-                    field: ['author', 'lang'],
-                    relatedStore: 'author',
-                    relatedField: ['id', 'lang'],
-                    relatedName: 'posts',
-                    onDelete: store.cascade
+        var postStore = new store.Store({
+            pk: ['id', 'lang'],
+            indexes: ['lang', 'slug', 'author'],
+            relations: {
+                foreignKey: {
+                    author: {
+                        field: ['author', 'lang'],
+                        relatedStore: 'author',
+                        relatedField: ['id', 'lang'],
+                        relatedName: 'posts',
+                        onDelete: store.cascade
+                    }
                 }
-            }
-        }, new TestStore(20, postEndpoint, ['id', 'lang']), Post);
+            },
+            remoteStore: new TestStore({
+                pk: ['id', 'lang'],
+                counter: 20,
+                endpoint: postEndpoint
+            }),
+            model: Post
+        });
         registry.register('post', postStore);
 
         registry.ready();

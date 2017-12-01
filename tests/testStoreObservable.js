@@ -9,17 +9,21 @@ define(['../store', './utils'], function(store, utils) {
         var registry = new store.Registry();
 
 
-        var postStore = new store.Store('id', ['slug', 'author'], {
-            foreignKey: {
-                author: {
-                    field: 'author',
-                    relatedStore: 'author',
-                    relatedField: 'id',
-                    relatedName: 'posts',
-                    onDelete: store.cascade
+        var postStore = new store.Store({
+            indexes: ['slug', 'author'],
+            relations: {
+                foreignKey: {
+                    author: {
+                        field: 'author',
+                        relatedStore: 'author',
+                        relatedField: 'id',
+                        relatedName: 'posts',
+                        onDelete: store.cascade
+                    }
                 }
-            }
-        }, new store.DummyStore());
+            },
+            remoteStore: new store.DummyStore()
+        });
         registry.register('post', postStore);
 
         registry.get('post').getLocalStore().observed().attachByAttr('views_count', 0, function(attr, oldValue, newValue) {
@@ -30,7 +34,10 @@ define(['../store', './utils'], function(store, utils) {
         });
 
 
-        var authorStore = new store.Store('id', ['firstName', 'lastName'], {}, new store.DummyStore());
+        var authorStore = new store.Store({
+            indexes: ['firstName', 'lastName'],
+            remoteStore: new store.DummyStore()
+        });
         registry.register('author', authorStore);
 
 
