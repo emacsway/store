@@ -185,8 +185,8 @@ Store public API
    In case the foreignKey don't has relatedName key, a new relatedName will be generated from the store name and "Set" suffix.
 
    | If ``options.objectAccessor`` is provided, the ``options.pk`` will be ignored.
+   | If ``options.mapper`` is provided, the ``options.model`` and ``options.objectAccessor`` will be ignored.
    | If ``options.localStorage`` is provided, the ``options.indexes`` will be ignored.
-   | If ``options.mapper`` is provided, the ``options.model`` will be ignored.
 
    The public method of Store:
 
