@@ -102,14 +102,22 @@ define(['./polyfill'], function() {
     function CompositeStore(options) {
         AbstractStore.call(this);
         options || (options = {});
-        if (!options.objectAccessor) {
-            options.objectAccessor = new ObjectAccessor(options.pk || 'id');
+
+        if (options.remoteStore) {
+            this._remoteStore = options.remoteStore;
+        } else {
+            if (options.mapper) {
+                var pk = options.mapper.getObjectAccessor().pk;
+            } else if (options.objectAccessor) {
+                var pk = options.objectAccessor.pk;
+            } else if (options.pk) {
+                var pk = options.pk;
+            } else {
+                throw Error("Pk is required!");
+            }
+            var remoteStore = pk instanceof Array ? new DummyStore(options) : new AutoIncrementStore(options);
+            this._remoteStore = withAspect(ObservableStoreAspect, remoteStore).init();
         }
-        if (!options.mapper) {
-            options.mapper = new Mapper({model: options.model});
-        }
-        var remoteStore = options.remoteStore ? options.remoteStore : (options.objectAccessor.pk instanceof Array ? new DummyStore(options) : new AutoIncrementStore(options));
-        this._remoteStore = withAspect(ObservableStoreAspect, remoteStore).init();
 
         if (options.localStore) {
             this._localStore = options.localStore;
@@ -1009,7 +1017,7 @@ define(['./polyfill'], function() {
 
 
     function ObjectAccessor(pk, setter, getter, deleter) {
-        this.pk = pk;
+        this.pk = pk || 'id';
         this.setter = setter || function(obj, attr, value) {
             if (typeof obj.observed === "function") {
                 obj.observed().set(attr, value);
@@ -1988,8 +1996,11 @@ define(['./polyfill'], function() {
     function AbstractLeafStore(options) {
         AbstractStore.call(this);
         options || (options = {});
-        this._objectAccessor = options.objectAccessor ? options.objectAccessor : new ObjectAccessor(options.pk || 'id');
-        this._mapper = options.mapper ? options.mapper : new Mapper({model: options.model});
+        this._mapper = options.mapper ? options.mapper : new Mapper({
+            model: options.model,
+            objectAccessor: options.objectAccessor,
+            pk: options.pk
+        });
         this._objectStateMapping = {};
     }
     AbstractLeafStore.prototype = clone({
@@ -2026,7 +2037,7 @@ define(['./polyfill'], function() {
             return ++AbstractLeafStore._oidCounter;
         },
         getObjectAccessor: function() {
-            return this._objectAccessor;
+            return this._mapper.getObjectAccessor();
         },
         syncDependencies: function(obj, old) {
         },
@@ -2092,8 +2103,8 @@ define(['./polyfill'], function() {
             return Promise.resolve(obj);
         },
         decompose: function(record) {
-            record = this.restoreInstance(record);
-            return this.add(record);
+            var obj = this.restoreInstance(record);
+            return this.add(obj);
         },
         clean: function() {
             clean(this._objectStateMapping);
@@ -2296,7 +2307,7 @@ define(['./polyfill'], function() {
                     }
                 }));
             }).then(function(response) {
-                clone(self._mapper.load(response), obj, self.getObjectAccessor().setter);
+                self._mapper.update(response, obj);
                 self._setInitObjectState(obj);
                 return obj;
             });
@@ -2318,7 +2329,7 @@ define(['./polyfill'], function() {
                     }
                 }));
             }).then(function(response) {
-                clone(self._mapper.load(response), obj, self.getObjectAccessor().setter);
+                self._mapper.update(response, obj);
                 self._setInitObjectState(obj);
                 return obj;
             });
@@ -2381,6 +2392,7 @@ define(['./polyfill'], function() {
         options = options || {};
         this._model = options.model || DefaultModel;
         this._mapping = options.mapping || {};
+        this._objectAccessor = options.objectAccessor || new ObjectAccessor(options.pk);
         this._reverseMapping = this.makeReverseMapping(this._mapping);
     }
     Mapper.prototype = {
@@ -2403,17 +2415,27 @@ define(['./polyfill'], function() {
             }
             return new this._model(data);
         },
-        isLoaded: function(recordOrObj) {
-            return recordOrObj instanceof this._model;
+        update: function(record, obj) {
+            for (var key in record) {
+                if (record.hasOwnProperty(key)) {
+                    this.getObjectAccessor().setValue(obj, (this._reverseMapping[key] || key), record[key]);
+                }
+            }
         },
         unload: function(obj) {
             var record = {};
             for (var key in obj) {
                 if (obj.hasOwnProperty(key)) {
-                    record[this._mapping[key] || key] = obj[key];
+                    record[this._mapping[key] || key] = this.getObjectAccessor().getValue(obj, key);
                 }
             }
             return record;
+        },
+        isLoaded: function(recordOrObj) {
+            return recordOrObj instanceof this._model;
+        },
+        getObjectAccessor: function() {
+            return this._objectAccessor;
         }
     };
 
