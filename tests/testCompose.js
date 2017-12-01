@@ -9,54 +9,70 @@ define(['../store', './utils'], function(store, utils) {
     function testCompose(resolve, reject) {
         var registry = new store.Registry();
 
-        var authorStore = new store.Store(['id', 'lang'], ['firstName', 'lastName'], {}, new store.DummyStore());
+        var authorStore = new store.Store({
+            pk: ['id', 'lang'],
+            indexes: ['firstName', 'lastName'],
+            remoteStore: new store.DummyStore()
+        });
         registry.register('author', authorStore);
 
-        var tagStore = new store.Store(['id', 'lang'], ['slug'], {}, new store.DummyStore());
+        var tagStore = new store.Store({
+            pk: ['id', 'lang'],
+            indexes: ['slug'],
+            remoteStore: new store.DummyStore()
+        });
         registry.register('tag', tagStore);
 
-        var tagPostStore = new store.Store('id', [], {
-            foreignKey: {
-                post: {
-                    field: ['postId', 'postLang'],
-                    relatedStore: 'post',
-                    relatedField: ['id', 'lang'],
-                    relatedName: 'tagPostSet',
-                    onDelete: store.cascade
-                },
-                tag: {
-                    field: ['tagId', 'tagLang'],
-                    relatedStore: 'tag',
-                    relatedField: ['id', 'lang'],
-                    relatedName: 'tagPostSet',
-                    onDelete: store.cascade
+        var tagPostStore = new store.Store({
+            relations: {
+                foreignKey: {
+                    post: {
+                        field: ['postId', 'postLang'],
+                        relatedStore: 'post',
+                        relatedField: ['id', 'lang'],
+                        relatedName: 'tagPostSet',
+                        onDelete: store.cascade
+                    },
+                    tag: {
+                        field: ['tagId', 'tagLang'],
+                        relatedStore: 'tag',
+                        relatedField: ['id', 'lang'],
+                        relatedName: 'tagPostSet',
+                        onDelete: store.cascade
+                    }
                 }
-            }
-        }, new store.DummyStore());
+            },
+            remoteStore: new store.DummyStore()
+        });
         tagPostStore.getLocalStore().setNextPk = function(obj) {
             tagPostStore._pkCounter || (tagPostStore._pkCounter = 0);
             this.getObjectAccessor().setPk(obj, ++tagPostStore._pkCounter);
         };
         registry.register('tagPost', tagPostStore);
 
-        var postStore = new store.Store(['id', 'lang'], ['lang', 'slug', 'author'], {
-            foreignKey: {
-                author: {
-                    field: ['author', 'lang'],
-                    relatedStore: 'author',
-                    relatedField: ['id', 'lang'],
-                    relatedName: 'posts',
-                    onDelete: store.cascade
+        var postStore = new store.Store({
+            pk: ['id', 'lang'],
+            indexes: ['lang', 'slug', 'author'],
+            relations: {
+                foreignKey: {
+                    author: {
+                        field: ['author', 'lang'],
+                        relatedStore: 'author',
+                        relatedField: ['id', 'lang'],
+                        relatedName: 'posts',
+                        onDelete: store.cascade
+                    }
+                },
+                manyToMany: {
+                    tags: {
+                        relation: 'tagPostSet',
+                        relatedStore: 'tag',
+                        relatedRelation: 'tagPostSet'
+                    }
                 }
             },
-            manyToMany: {
-                tags: {
-                    relation: 'tagPostSet',
-                    relatedStore: 'tag',
-                    relatedRelation: 'tagPostSet'
-                }
-            }
-        }, new store.DummyStore());
+            remoteStore: new store.DummyStore()
+        });
         registry.register('post', postStore);
 
         registry.ready();

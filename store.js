@@ -99,20 +99,23 @@ define(['./polyfill'], function() {
     }, Object.create(IStore.prototype));
 
 
-    function CompositeStore(pkOrObjectAccessor, indexesOrLocalStore, remoteStore, modelOrMapper) {
+    function CompositeStore(options) {
         AbstractStore.call(this);
-        pkOrObjectAccessor = pkOrObjectAccessor || 'id';
-        var objectAccessor = pkOrObjectAccessor instanceof ObjectAccessor ? pkOrObjectAccessor : new ObjectAccessor(pkOrObjectAccessor);
-
-        var remoteStore = remoteStore ? remoteStore : (objectAccessor.pk instanceof Array ? new DummyStore(objectAccessor) : new AutoIncrementStore(objectAccessor));
+        options || (options = {});
+        if (!options.objectAccessor) {
+            options.objectAccessor = new ObjectAccessor(options.pk || 'id');
+        }
+        if (!options.mapper) {
+            options.mapper = new Mapper({model: options.model});
+        }
+        var remoteStore = options.remoteStore ? options.remoteStore : (options.objectAccessor.pk instanceof Array ? new DummyStore(options) : new AutoIncrementStore(options));
         this._remoteStore = withAspect(ObservableStoreAspect, remoteStore).init();
 
-        if (indexesOrLocalStore instanceof IStore) {
-            this._localStore = indexesOrLocalStore;
+        if (options.localStore) {
+            this._localStore = options.localStore;
         } else {
-            var indexes = indexesOrLocalStore;
-            indexes = indexes.concat(this.getRequiredIndexes());
-            this._localStore = withAspect(ObservableStoreAspect, new MemoryStore(objectAccessor, indexes, modelOrMapper)).init();
+            options.indexes = (options.indexes || []).concat(this.getRequiredIndexes());
+            this._localStore = withAspect(ObservableStoreAspect, new MemoryStore(options)).init();
         }
     }
     CompositeStore.prototype = clone({
@@ -142,6 +145,9 @@ define(['./polyfill'], function() {
             return this._localStore.getQueryEngine();
         },
         syncDependencies: function(obj, old) {
+        },
+        addIndex: function(index) {
+            return this._localStore.addIndex(index);
         },
         decompose: function(record) {
             record = this.restoreInstance(record);
@@ -431,6 +437,7 @@ define(['./polyfill'], function() {
         },
         getRequiredIndexes: function() {
             var indexes = __super__(RelationalStoreAspect, this).getRequiredIndexes.call(this).slice();
+            if (!this.relations) { return indexes; } // Called from CompositeStore()
             for (var relationName in this.relations.foreignKey) {
                 var fields = this.relations.foreignKey[relationName].getField();
                 for (var i = 0; i < fields.length; i++) {
@@ -625,11 +632,11 @@ define(['./polyfill'], function() {
      * This class implements the pattern Repository:
      * http://martinfowler.com/eaaCatalog/repository.html
      */
-    function Store(pkOrObjectAccessor, indexesOrLocalStore, relations, remoteStore, model) {
-        indexesOrLocalStore || (indexesOrLocalStore = []);
+    function Store(options) {
+        options || (options = {});
+        CompositeStore.call(this, options);
+        RelationalStoreAspect.init.call(this, options.relations);
         ObservableStoreAspect.init.call(this);
-        RelationalStoreAspect.init.call(this, relations, indexesOrLocalStore);
-        CompositeStore.call(this, pkOrObjectAccessor, indexesOrLocalStore, remoteStore, model);
     }
     Store.prototype = clone({
         constructor: Store
@@ -1447,7 +1454,7 @@ define(['./polyfill'], function() {
                 var relatedStore = relation.getRelatedStore();
                 var relatedQueryResult = relatedStore.find(relation.getRelatedQuery(self._obj));
                 return when(relatedQueryResult, function(relatedQueryResult) {
-                    self._obj[relationName] = relatedQueryResult;
+                    self._store.getObjectAccessor().setValue(self._obj, relationName, relatedQueryResult);
                     return whenIter(relatedQueryResult, function(relatedObj) {
                         return self._handleRelatedObj(relatedStore, relatedObj);
                     });
@@ -1463,9 +1470,10 @@ define(['./polyfill'], function() {
             return whenIter(keys(this._store.relations.manyToMany), function(relationName) {
                 var m2mRelation = self._store.relations.manyToMany[relationName];
                 var relatedStore = m2mRelation.getRelatedStore();
-                var relatedQueryResult = self._obj[relationName] = relatedStore.find(m2mRelation.getRelatedQuery(self._obj));
+                var relatedQueryResult = relatedStore.find(m2mRelation.getRelatedQuery(self._obj));
+                self._store.getObjectAccessor().setValue(self._obj, relationName, relatedQueryResult);
                 return when(relatedQueryResult, function(relatedQueryResult) {
-                    self._obj[relationName] = relatedQueryResult;
+                    self._store.getObjectAccessor().setValue(self._obj, relationName, relatedQueryResult);
                     return whenIter(relatedQueryResult, function(relatedObj) {
                         return self._handleRelatedObj(relatedStore, relatedObj);
                     });
@@ -1499,11 +1507,11 @@ define(['./polyfill'], function() {
             return whenIter(keys(this._store.relations.foreignKey), function(relationName) {
                 var relation = self._store.relations.foreignKey[relationName];
                 var relatedStore = relation.getRelatedStore();
-                var relatedObj = self._obj[relationName];
+                var relatedObj = self._store.getObjectAccessor().getValue(self._obj, relationName);
                 if (relatedObj && typeof relatedObj === "object") {
                     self._setForeignKeyToRelatedObj(relatedObj, relation.getRelatedRelation(), self._obj);
                     return when(self._handleRelatedObj(relatedStore, relatedObj), function(relatedObj) {
-                        self._obj[relationName] = relatedObj;
+                        self._store.getObjectAccessor().setValue(self._obj, relationName, relatedObj);
                     });
                 }
             });
@@ -1516,7 +1524,7 @@ define(['./polyfill'], function() {
                 }
                 var relation = self._store.relations.oneToMany[relationName];
                 var relatedStore = relation.getRelatedStore();
-                var relatedObjectList = self._obj[relationName] || [];
+                var relatedObjectList = self._store.getObjectAccessor().getValue(self._obj, relationName) || [];
                 return whenIter(relatedObjectList, function(relatedObj, i) {
                     self._setForeignKeyToRelatedObj(self._obj, relation, relatedObj);
                     return when(self._handleRelatedObj(relatedStore, relatedObj), function(relatedObj) {
@@ -1554,7 +1562,7 @@ define(['./polyfill'], function() {
             return whenIter(keys(this._store.relations.manyToMany), function(relationName) {
                 var m2mRelation = self._store.relations.manyToMany[relationName];
                 var relatedStore = m2mRelation.getRelatedStore();
-                var relatedObjectList = self._obj[relationName] || [];
+                var relatedObjectList = self._store.getObjectAccessor().getValue(self._obj, relationName) || [];
                 return whenIter(relatedObjectList, function(relatedObj, i) {
                     return when(self._handleRelatedObj(relatedStore, relatedObj), function(relatedObj) {
                         relatedObjectList[i] = relatedObj;
@@ -1574,11 +1582,11 @@ define(['./polyfill'], function() {
             var m2mObject = {};
             var toRelatedField = relatedRelation.getRelatedField();
             for (var i = 0; i < toRelatedField.length; i++) {
-                m2mObject[toRelatedField[i]] = relatedValue[i];
+                m2mStore.getObjectAccessor().setValue(m2mObject, toRelatedField[i], relatedValue[i]);
             }
             var fromRelatedField = relation.getRelatedField();
             for (var i = 0; i < fromRelatedField.length; i++) {
-                m2mObject[fromRelatedField[i]] = value[i];
+                m2mStore.getObjectAccessor().setValue(m2mObject, fromRelatedField[i], value[i]);
             }
             var query = clone(relation.getRelatedQuery(this._obj),
                               relatedRelation.getRelatedQuery(relatedObj));
@@ -1977,17 +1985,11 @@ define(['./polyfill'], function() {
     }, Object.create(SubResult.prototype));
 
 
-    function AbstractLeafStore(pkOrObjectAccessor, modelOrMapper) {
+    function AbstractLeafStore(options) {
         AbstractStore.call(this);
-        if (!modelOrMapper) {
-            this._mapper = new Mapper();
-        } else if (modelOrMapper instanceof Mapper) {
-            this._mapper = modelOrMapper;
-        } else {
-            this._mapper = new Mapper({model: modelOrMapper});
-        }
-        pkOrObjectAccessor = pkOrObjectAccessor || 'id';
-        this._objectAccessor = pkOrObjectAccessor instanceof ObjectAccessor ? pkOrObjectAccessor : new ObjectAccessor(pkOrObjectAccessor);
+        options || (options = {});
+        this._objectAccessor = options.objectAccessor ? options.objectAccessor : new ObjectAccessor(options.pk || 'id');
+        this._mapper = options.mapper ? options.mapper : new Mapper({model: options.model});
         this._objectStateMapping = {};
     }
     AbstractLeafStore.prototype = clone({
@@ -2099,13 +2101,14 @@ define(['./polyfill'], function() {
     }, Object.create(AbstractStore.prototype));
 
 
-    function MemoryStore(pkOrObjectAccessor, indexes, modelOrMapper) {
+    function MemoryStore(options) {
         var self = this;
-        AbstractLeafStore.call(this, pkOrObjectAccessor, modelOrMapper);
+        options || (options = {});
+        AbstractLeafStore.call(this, options);
         this.objectList = [];
         this.pkIndex = {};
         this.indexes = {};
-        indexes || (indexes = []);
+        var indexes = options.indexes || [];
         indexes = indexes.concat(this.getRequiredIndexes());
         indexes.forEach(function(index) {
             self.addIndex(index);
@@ -2147,10 +2150,11 @@ define(['./polyfill'], function() {
             return obj;
         },
         delete: function(obj, state) {
-            delete this.pkIndex[this.getObjectAccessor().getPk(obj)];
+            var objectAccessor = this.getObjectAccessor();
+            delete this.pkIndex[objectAccessor.getPk(obj)];
             this.objectList.splice(this.objectList.indexOf(obj), 1);
             for (var field in this.indexes) {
-                var value = obj[field];
+                var value = objectAccessor.getValue(obj, field);
                 arrayRemove(this.indexes[field][value], obj);
             }
             this._delInitObjectState(obj);
@@ -2187,9 +2191,10 @@ define(['./polyfill'], function() {
             }
         },
         _indexObj: function(obj) {
-            this.pkIndex[this.getObjectAccessor().getPk(obj)] = obj;
+            var objectAccessor = this.getObjectAccessor();
+            this.pkIndex[objectAccessor.getPk(obj)] = obj;
             for (var field in this.indexes) {
-                var value = obj[field];
+                var value = objectAccessor.getValue(obj, field);
                 if (!(value in this.indexes[field])) {
                     this.indexes[field][value] = [];
                 };
@@ -2199,13 +2204,14 @@ define(['./polyfill'], function() {
         },
         _reindexObj: function(old, obj) {
             var self = this;
-            if (this.getObjectAccessor().getPk(old) !== this.getObjectAccessor().getPk(obj)) {
-                delete this.pkIndex[this.getObjectAccessor().getPk(old)];
-                this.pkIndex[this.getObjectAccessor().getPk(obj)] = obj;
+            var objectAccessor = this.getObjectAccessor();
+            if (objectAccessor.getPk(old) !== objectAccessor.getPk(obj)) {
+                delete this.pkIndex[objectAccessor.getPk(old)];
+                this.pkIndex[objectAccessor.getPk(obj)] = obj;
             }
             for (var field in this.indexes) {
                 var oldValue = old[field],
-                    value = obj[field],
+                    value = objectAccessor.getValue(obj, field),
                     index = this.indexes[field];
                 if (toString(oldValue) !== toString(value)) {
                     if (!(value in index)) {
@@ -2224,8 +2230,8 @@ define(['./polyfill'], function() {
 
 
     function RestStore(options) {
-        options = options || {};
-        AbstractLeafStore.call(this, options.objectAccessor || options.pk, options.mapper || options.model);
+        options || (options = {});
+        AbstractLeafStore.call(this, options);
         this._url = options.url;
         this._jQuery = options.jQuery || window.jQuery;
         this._requestOptions = options.requestOptions || {};
@@ -2348,16 +2354,16 @@ define(['./polyfill'], function() {
     }, Object.create(AbstractLeafStore.prototype));
 
 
-    function DummyStore(pk) {
-        AbstractLeafStore.call(this, pk);
+    function DummyStore(options) {
+        AbstractLeafStore.call(this, options);
     }
     DummyStore.prototype = clone({
         constructor: DummyStore
     }, Object.create(AbstractLeafStore.prototype));
 
 
-    function AutoIncrementStore(pk) {
-        DummyStore.call(this, pk);
+    function AutoIncrementStore(options) {
+        DummyStore.call(this, options);
         this._counter = 0;
     }
     AutoIncrementStore.prototype = clone({
@@ -3233,11 +3239,11 @@ define(['./polyfill'], function() {
             return delegate;
         };
         wrapped.init = function() {
-            if (aspect.init) {
-                aspect.init.apply(this, Array.prototype.slice.call(selfArguments, 2));
-            }
             if (delegate.init) {
                 delegate.init.call(this);
+            }
+            if (aspect.init) {
+                aspect.init.apply(this, Array.prototype.slice.call(selfArguments, 2));
             }
             return this;
         };

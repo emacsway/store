@@ -111,20 +111,32 @@ Store public API
 ----------------
 
 
-.. class:: Store([pkOrObjectAccessor[, indexesOrLocalStore[, relations[, remoteStore[, modelOrMapper]]]]])
+.. class:: Store([options])
 
-   :param pkOrObjectAccessor: the name of Primary Key (or list of names of composite Primary Key) or :class:`ObjectAccessor` instance.
-   :type pkOrObjectAccessor: string or Array[string] or ObjectAccessor
-   :param indexesOrLocalStore: the array of field names to be indexed for fast finding or instance of local store. \
-      Note, all field used by relations or primary key will be indexed automatically.
-   :type indexesOrLocalStore: Array[string] or IStore
+   :param Object options: the keyword arguments.
+
+   The ``options`` object can have the next keys:
+
+   :param options.pk: the name of Primary Key or list of names of composite Primary Key.\
+       Optional. The default value is 'id'.
+   :type options.pk: string or Array[string]
+   :param ObjectAccessor objectAccessor: an instance of :class:`ObjectAccessor`.
+       Optional. By default will be created on fly using ``options.pk``.
+   :param Array[string] options.indexes: the array of field names to be indexed for fast finding or instance of local store.\
+       Note, all field used by relations or primary key will be indexed automatically.\
+       Optional.
+   :type IStore localStore: an instance of :class:`IStore`. Optional.\
+       By default will be created on fly using ``options``
+   :param IStore remoteStore: an instance of :class:`IStore`. Optional.\
+       By default will be created on fly using ``options``
+   :param function model: the model constructor, which should be applied before to add object into the store.\
+       Can be usefull in combination with :func:`Store.prototype.decompose`.\
+       Optional. The default value is :class:`DefaultModel`
+   :param Mapper mapper: an instance of :class:`Mapper`. Optional.\
+       Optioans. By default will be created on fly using ``options.model``
    :param Object relations: the dictionary describes the schema relations.
-   :param IStore remoteStore: implements the Gateway_ pattern
-   :param modelOrMapper: the model constructor, which should be applied before to add object into the store. \
-      Can be usefull in combination with :func:`Store.prototype.decompose`.
-   :type modelOrMapper: function or Mapper
 
-   Format of ``relations`` argument::
+   The format of ``options.relations`` argument::
 
       {
           foreignKey: {
@@ -171,6 +183,10 @@ Store public API
 
    If oneToMany is not defined, it will be built automatically from foreignKey of related store.
    In case the foreignKey don't has relatedName key, a new relatedName will be generated from the store name and "Set" suffix.
+
+   | If ``options.objectAccessor`` is provided, the ``options.pk`` will be ignored.
+   | If ``options.localStorage`` is provided, the ``options.indexes`` will be ignored.
+   | If ``options.mapper`` is provided, the ``options.model`` will be ignored.
 
    The public method of Store:
 
