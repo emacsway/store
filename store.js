@@ -2148,10 +2148,11 @@ define(['./polyfill'], function() {
             return obj;
         },
         delete: function(obj, state) {
-            delete this.pkIndex[this.getObjectAccessor().getPk(obj)];
+            var objectAccessor = this.getObjectAccessor();
+            delete this.pkIndex[objectAccessor.getPk(obj)];
             this.objectList.splice(this.objectList.indexOf(obj), 1);
             for (var field in this.indexes) {
-                var value = obj[field];
+                var value = objectAccessor.getValue(obj, field);
                 arrayRemove(this.indexes[field][value], obj);
             }
             this._delInitObjectState(obj);
@@ -2188,9 +2189,10 @@ define(['./polyfill'], function() {
             }
         },
         _indexObj: function(obj) {
-            this.pkIndex[this.getObjectAccessor().getPk(obj)] = obj;
+            var objectAccessor = this.getObjectAccessor();
+            this.pkIndex[objectAccessor.getPk(obj)] = obj;
             for (var field in this.indexes) {
-                var value = obj[field];
+                var value = objectAccessor.getValue(obj, field);
                 if (!(value in this.indexes[field])) {
                     this.indexes[field][value] = [];
                 };
@@ -2200,13 +2202,14 @@ define(['./polyfill'], function() {
         },
         _reindexObj: function(old, obj) {
             var self = this;
-            if (this.getObjectAccessor().getPk(old) !== this.getObjectAccessor().getPk(obj)) {
-                delete this.pkIndex[this.getObjectAccessor().getPk(old)];
-                this.pkIndex[this.getObjectAccessor().getPk(obj)] = obj;
+            var objectAccessor = this.getObjectAccessor();
+            if (objectAccessor.getPk(old) !== objectAccessor.getPk(obj)) {
+                delete this.pkIndex[objectAccessor.getPk(old)];
+                this.pkIndex[objectAccessor.getPk(obj)] = obj;
             }
             for (var field in this.indexes) {
                 var oldValue = old[field],
-                    value = obj[field],
+                    value = objectAccessor.getValue(obj, field),
                     index = this.indexes[field];
                 if (toString(oldValue) !== toString(value)) {
                     if (!(value in index)) {
