@@ -120,50 +120,51 @@ define(['../store', './utils'], function(store, utils) {
                 }
             ]
         };
-        authorStore.decompose(author);
 
-        var compositePkAccessor = function(o) { return [o.id, o.lang]; };
-        var r;
-        r = authorStore.find();
-        assert(expectPks(r, [[1, 'en']], compositePkAccessor));
-        r = postStore.find();
-        assert(expectPks(r, [[2, 'en'], [3, 'en']], compositePkAccessor));
-        for (var i = 0; i < r.length; i++) {
-            assert(r[i].author === 1);
-        }
-        r = tagStore.find();
-        assert(expectPks(r, [[5, 'en'], [6, 'en'], [7, 'en']], compositePkAccessor));
-        r = tagPostStore.find({postId: 2, postLang: 'en', tagId: 5, tagLang: 'en'});
-        assert(r.length === 1);
-        r = tagPostStore.find({postId: 2, postLang: 'en', tagId: 6, tagLang: 'en'});
-        assert(r.length === 1);
-        r = tagPostStore.find({postId: 3, postLang: 'en', tagId: 5, tagLang: 'en'});
-        assert(r.length === 1);
-        r = tagPostStore.find({postId: 3, postLang: 'en', tagId: 7, tagLang: 'en'});
-        assert(r.length === 1);
+        store.when(authorStore.decompose(author), function(author) {
+            var compositePkAccessor = function(o) { return [o.id, o.lang]; };
+            var r;
+            r = authorStore.find();
+            assert(expectPks(r, [[1, 'en']], compositePkAccessor));
+            r = postStore.find();
+            assert(expectPks(r, [[2, 'en'], [3, 'en']], compositePkAccessor));
+            for (var i = 0; i < r.length; i++) {
+                assert(r[i].author === 1);
+            }
+            r = tagStore.find();
+            assert(expectPks(r, [[5, 'en'], [6, 'en'], [7, 'en']], compositePkAccessor));
+            r = tagPostStore.find({postId: 2, postLang: 'en', tagId: 5, tagLang: 'en'});
+            assert(r.length === 1);
+            r = tagPostStore.find({postId: 2, postLang: 'en', tagId: 6, tagLang: 'en'});
+            assert(r.length === 1);
+            r = tagPostStore.find({postId: 3, postLang: 'en', tagId: 5, tagLang: 'en'});
+            assert(r.length === 1);
+            r = tagPostStore.find({postId: 3, postLang: 'en', tagId: 7, tagLang: 'en'});
+            assert(r.length === 1);
 
-        r = categoryStore.find();
-        assert(expectPks(r, [[8, 'en'], [9, 'en']], compositePkAccessor));
+            r = categoryStore.find();
+            assert(expectPks(r, [[8, 'en'], [9, 'en']], compositePkAccessor));
 
-        assert(author.posts[0].id === 2);
-        assert(author.posts[0].author === 1);
-        assert(author.posts[1].id === 3);
-        assert(author.posts[1].author === 1);
-        assert(author.posts.length === 2);
+            assert(author.posts[0].id === 2);
+            assert(author.posts[0].author === 1);
+            assert(author.posts[1].id === 3);
+            assert(author.posts[1].author === 1);
+            assert(author.posts.length === 2);
 
-        assert(author.posts[0].tags[0].id === 5);
-        assert(author.posts[0].tags[1].id === 6);
-        assert(author.posts[0].tags.length === 2);
+            assert(author.posts[0].tags[0].id === 5);
+            assert(author.posts[0].tags[1].id === 6);
+            assert(author.posts[0].tags.length === 2);
 
-        assert(author.posts[1].tags[0].id === 5);
-        assert(author.posts[1].tags[1].id === 7);
-        assert(author.posts[1].tags.length === 2);
+            assert(author.posts[1].tags[0].id === 5);
+            assert(author.posts[1].tags[1].id === 7);
+            assert(author.posts[1].tags.length === 2);
 
-        assert(author.posts[0].category_id === 8);
-        assert(author.posts[1].category_id === 9);
+            assert(author.posts[0].category_id === 8);
+            assert(author.posts[1].category_id === 9);
 
-        registry.destroy();
-        resolve();
+            registry.destroy();
+            resolve();
+        });
     }
     return testDecompose;
 });
