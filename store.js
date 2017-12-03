@@ -2306,7 +2306,7 @@ define(['./polyfill'], function() {
                     }
                 }));
             }).then(function(response) {
-                self._mapper.update(response, obj);
+                self._mapper.update(response, obj); // TODO: the obj can be aggregate? Use decompose with merging?
                 self._setInitObjectState(obj);
                 return obj;
             });
