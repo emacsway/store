@@ -93,6 +93,7 @@ define(['./polyfill'], function() {
         addIndex: function(index) {
         },
         compose: function(obj, state) {
+            return obj;
         },
         destroy: function() {
         }
@@ -158,8 +159,8 @@ define(['./polyfill'], function() {
             return this._localStore.addIndex(index);
         },
         decompose: function(record) {
-            record = this.restoreInstance(record);
-            return this._localStore.add(record);
+            var obj = this.restoreInstance(record);
+            return this._localStore.add(obj);
         },
         fill: function(options, callback) {  // TODO: Deprecated. Remove me.
             window.console && window.console.warn("Store.prototype.fill() is deprecated! Use Store.prototype.pull() instead!");
@@ -504,14 +505,14 @@ define(['./polyfill'], function() {
          * Returns composition of related objects.
          */
         compose: function(obj, state) {
-            new Compose(this, obj, state).compute();
+            return new Compose(this, obj, state).compute();
         },
         /*
          * Load related stores from composition of object.
          */
         decompose: function(record) {
-            record = this.restoreInstance(record);
-            return new Decompose(this, record).compute();
+            var obj = this.restoreInstance(record);
+            return new Decompose(this, obj).compute();
         },
         _prepareQuery: function(queryEngine, query) {
             var self = this;
@@ -1449,7 +1450,9 @@ define(['./polyfill'], function() {
             if (this._state.isVisited(this._store, this._obj)) { return; }  // It's circular references. Skip it.
             this._state.visit(this._store, this._obj);
             return when(this._handleOneToMany(), function() {
-                return self._handleManyToMany();
+                return when(self._handleManyToMany(), function() {
+                    return self._obj;
+                });
             });
         },
         _handleOneToMany: function() {

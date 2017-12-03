@@ -113,26 +113,28 @@ define(['../store', './utils'], function(store, utils) {
         store.whenIter(tagPosts, function(tagPost) { return tagPostStore.getLocalStore().add(tagPost); });
 
         var author = authorStore.get([1, 'en']);
-        authorStore.compose(author);
-        console.debug(author);
-        /*
-         * Similar output of composite object:
-         * {"id":1, "lang":"en", "firstName": "Fn1", "lastName": "Ln1","posts": [
-         *     {"id":1, "lang": "en", "slug": "sl1", "title": "tl1", "author":1, "tags": [
-         *         {"id": 1, "lang": "en", "name": "T1"}
-         *     ]},
-         *     {"id": 2, "lang": "en", "slug": "sl1", "title": "tl2", "author": 1, "tags":[
-         *         {"id": 1, "lang": "en", "name": "T1"}
-         *     ]}
-         * ]}"
-         */
-        var compositePkAccessor = function(o) { return [o.id, o.lang]; };
-        assert(expectPks(author.posts, [[1, 'en'], [2, 'en']], compositePkAccessor));
-        assert(expectPks(author.posts[0].tags, [[1, 'en']], compositePkAccessor));
-        assert(expectPks(author.posts[1].tags, [[1, 'en']], compositePkAccessor));
 
-        registry.destroy();
-        resolve();
+        store.when(authorStore.compose(author), function(author) {
+            console.debug(author);
+            /*
+             * Similar output of composite object:
+             * {"id":1, "lang":"en", "firstName": "Fn1", "lastName": "Ln1","posts": [
+             *     {"id":1, "lang": "en", "slug": "sl1", "title": "tl1", "author":1, "tags": [
+             *         {"id": 1, "lang": "en", "name": "T1"}
+             *     ]},
+             *     {"id": 2, "lang": "en", "slug": "sl1", "title": "tl2", "author": 1, "tags":[
+             *         {"id": 1, "lang": "en", "name": "T1"}
+             *     ]}
+             * ]}"
+             */
+            var compositePkAccessor = function(o) { return [o.id, o.lang]; };
+            assert(expectPks(author.posts, [[1, 'en'], [2, 'en']], compositePkAccessor));
+            assert(expectPks(author.posts[0].tags, [[1, 'en']], compositePkAccessor));
+            assert(expectPks(author.posts[1].tags, [[1, 'en']], compositePkAccessor));
+
+            registry.destroy();
+            resolve();
+        });
     }
     return testCompose;
 });
