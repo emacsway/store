@@ -1427,13 +1427,13 @@ define(['./polyfill'], function() {
     PkRequired.prototype.constructor = PkRequired;
 
 
-    function ObjectAlreadyLoaded(message) {
-        this.name = 'ObjectAlreadyLoaded';
-        this.message = message || "Only single instance of object can be loaded!";
+    function ObjectAlreadyAdded(message) {
+        this.name = 'ObjectAlreadyAdded';
+        this.message = message || "Only single instance of object can be added into the store!";
         this.stack = (new Error()).stack;
     }
-    ObjectAlreadyLoaded.prototype = Object.create(Error.prototype);
-    ObjectAlreadyLoaded.prototype.constructor = ObjectAlreadyLoaded;
+    ObjectAlreadyAdded.prototype = Object.create(Error.prototype);
+    ObjectAlreadyAdded.prototype.constructor = ObjectAlreadyAdded;
 
 
     function Compose(store, obj, state) {
@@ -1498,9 +1498,18 @@ define(['./polyfill'], function() {
     Decompose.prototype = {
         constructor: Decompose,
         compute: function() {
-            var self = this;
+            var self = this,
+                localStore = this._store.getLocalStore();
             return when(self._handleForeignKey(), function() {
-                return when(self._store.getLocalStore().add(self._obj), function(obj) {
+                return when(resolveRejection(rejectException(localStore.add, localStore, [self._obj]), function(reason) {
+                    if (reason instanceof ObjectAlreadyAdded) {
+                        // Make object to be single instance;
+                        // TODO: Merge new object's state into old object's instance?
+                        return localStore.get(localStore.getObjectAccessor().getPk(self._obj));
+                    } else {
+                        return Promise.reject(reason);
+                    }
+                }), function(obj) {
                     self._obj = obj;
                     return when(self._handleOneToMany(), function() {
                         return when(self._handleManyToMany(), function() {
@@ -1553,17 +1562,7 @@ define(['./polyfill'], function() {
             }
         },
         _handleRelatedObj: function(relatedStore, relatedObj) {
-            try {
-                relatedObj = relatedStore.decompose(relatedObj);
-            } catch (e) {
-                if (e instanceof ObjectAlreadyLoaded) {
-                    // Make object to be single instance;
-                    return relatedStore.get(relatedStore.getObjectAccessor().getPk(relatedObj));
-                } else {
-                    throw e;
-                }
-            }
-            return relatedObj;
+            return relatedStore.decompose(relatedObj);
         },
         _handleManyToMany: function() {
             var self = this;
@@ -2144,7 +2143,7 @@ define(['./polyfill'], function() {
             var pkValue = this.getObjectAccessor().getPk(obj);
             if (pkValue in this.pkIndex) {
                 if (this.pkIndex[pkValue] !== obj) {
-                    throw new ObjectAlreadyLoaded();
+                    throw new ObjectAlreadyAdded();
                 } else {
                     return this.pkIndex[pkValue];
                 }
@@ -3212,6 +3211,27 @@ define(['./polyfill'], function() {
     }
 
 
+    function rejectException(callback, thisArg, args) {
+        try {
+            return callback.apply(thisArg, args);
+        } catch (e) {
+            return Promise.reject(e);
+        }
+    }
+
+
+    function resolveRejection(valueOrPromise, errback) {
+		var receivedPromise = valueOrPromise && typeof valueOrPromise.then === "function";
+		if (!receivedPromise) {
+            return valueOrPromise;
+        } else {
+            return valueOrPromise.catch(function(reason) {
+                return Promise.resolve(errback(reason));
+            });
+        }
+    }
+
+
     /*
      * Based on https://github.com/dojo/dojo/blob/master/when.js
      */
@@ -3346,7 +3366,7 @@ define(['./polyfill'], function() {
         DjangoFilterQueryEngine: DjangoFilterQueryEngine,
         djangoFilterQueryEngine: djangoFilterQueryEngine,
         PkRequired: PkRequired,
-        ObjectAlreadyLoaded: ObjectAlreadyLoaded,
+        ObjectAlreadyAdded: ObjectAlreadyAdded,
         Registry: Registry,
         AbstractLeafStore: AbstractLeafStore,
         MemoryStore: MemoryStore,
@@ -3374,6 +3394,8 @@ define(['./polyfill'], function() {
         arrayRemove: arrayRemove,
         arrayEqual: arrayEqual,
         keys: keys,
+        rejectException: rejectException,
+        resolveRejection: resolveRejection,
         when: when,
         whenIter: whenIter
     };
