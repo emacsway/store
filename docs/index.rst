@@ -278,19 +278,21 @@ Store events
 Events by ObservableStoreAspect
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-============  =============================================
-Event         When notified
-============  =============================================
-"add"         on object is added to store, triggered by :func:`Store.prototype.add`
+=================  =============================================
+Event              When notified
+=================  =============================================
+"add"              on object is added to store, triggered by :func:`Store.prototype.add`
 
-"update"      on object is updated in store, triggered by :func:`Store.prototype.update`
+"update"           on object is updated in store, triggered by :func:`Store.prototype.update`
 
-"delete"      on object is deleted from store, triggered by :func:`Store.prototype.delete`
+"delete"           on object is deleted from store, triggered by :func:`Store.prototype.delete`
 
-"destroy"     immediately before store is destroyed, triggered by :func:`Store.prototype.destroy`
-              Usually used to kill
-              `reference cycles <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Memory_Management>`__.
-============  =============================================
+"restoreObject"    on object is restored, triggered by :func:`Store.prototype.delete`
+
+"destroy"          immediately before store is destroyed, triggered by :func:`Store.prototype.destroy`
+                   Usually used to kill
+                   `reference cycles <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Memory_Management>`__.
+=================  =============================================
 
 
 Store events by PreObservableStoreAspect

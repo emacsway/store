@@ -24,7 +24,7 @@ define(['./polyfill'], function() {
         getObjectAccessor: function() {
             throw Error("Not Implemented Error");
         },
-        restoreInstance: function(record) {
+        restoreObject: function(record) {
             throw Error("Not Implemented Error");
         },
         getInitObjectState: function(obj) {
@@ -40,6 +40,12 @@ define(['./polyfill'], function() {
             throw Error("Not Implemented Error");
         },
         addIndex: function(index) {
+            throw Error("Not Implemented Error");
+        },
+        getLocalStore: function() {
+            throw Error("Not Implemented Error");
+        },
+        getRemoteStore: function() {
             throw Error("Not Implemented Error");
         },
         get: function(pk) {
@@ -74,12 +80,22 @@ define(['./polyfill'], function() {
 
     function AbstractStore() {
         this._name = null;
+        observe(this, 'observed', DummyStoreObservable);
     }
     AbstractStore.prototype = clone({
         constructor: AbstractStore,
         register: function(name, registry) {
+            var self = this;
             this._name = name;
             this._registry = registry;
+            var deco = function(func) {
+                return function() {
+                    var obj = func.apply(this, arguments);
+                    obj.getStore = function() { return self; };
+                    return obj;
+                };
+            };
+            this.getLocalStore().restoreObject = deco(this.getLocalStore().restoreObject);
         },
         getRegistry: function() {
             return this._registry;
@@ -129,7 +145,7 @@ define(['./polyfill'], function() {
     }
     CompositeStore.prototype = clone({
         constructor: CompositeStore,
-        getLocalStore: function () {
+        getLocalStore: function() {
             return this._localStore;
         },
         getRemoteStore: function() {
@@ -147,8 +163,8 @@ define(['./polyfill'], function() {
         getInitObjectState: function(obj) {
             return this._localStore.getInitObjectState(obj);
         },
-        restoreInstance: function(record) {
-            return this._remoteStore.restoreInstance(record);
+        restoreObject: function(record) {
+            return this._remoteStore.restoreObject(record);
         },
         getQueryEngine: function() {
             return this._localStore.getQueryEngine();
@@ -159,7 +175,7 @@ define(['./polyfill'], function() {
             return this._localStore.addIndex(index);
         },
         decompose: function(record) {
-            var obj = this.restoreInstance(record);
+            var obj = this.restoreObject(record);
             return this._localStore.add(obj);
         },
         fill: function(options, callback) {  // TODO: Deprecated. Remove me.
@@ -203,14 +219,14 @@ define(['./polyfill'], function() {
                 });
             }, function() {  // onRollback
                 return when(this.store._localStore.delete(this.obj));
-            }, function () {  // onPending
+            }, function() {  // onPending
                 var dirty = this;
                 this.store.getObjectAccessor().setTmpPk(dirty.obj);
                 return when(dirty.store._localStore.add(dirty.obj), function(obj) {
                     dirty.obj = obj;
                     return when(obj);
                 });
-            }, function () {  // onAutocommit
+            }, function() {  // onAutocommit
                 var dirty = this;
                 return when(dirty.store.getRemoteStore().add(dirty.obj), function(obj) {
                     return when(dirty.store._localStore.add(dirty.obj), function(obj) {
@@ -306,6 +322,13 @@ define(['./polyfill'], function() {
     var ObservableStoreAspect = {
         init: function() {
             observe(this, 'observed', StoreObservable);
+        },
+        restoreObject: function(record) {
+            var self = this;
+            return when(__super__(ObservableStoreAspect, self).restoreObject.call(this, record), function(obj) {
+                self.observed().notify('restoreObject', obj);
+                return obj;
+            });
         },
         add:  function(obj, state) {
             var self = this;
@@ -511,7 +534,7 @@ define(['./polyfill'], function() {
          * Load related stores from composition of object.
          */
         decompose: function(record) {
-            var obj = this.restoreInstance(record);
+            var obj = this.restoreObject(record);
             return new Decompose(this, obj).compute();
         },
         _prepareQuery: function(queryEngine, query) {
@@ -707,7 +730,7 @@ define(['./polyfill'], function() {
     }
     ForeignKey.prototype = clone({
         constructor: ForeignKey,
-        setupReverseRelation: function () {
+        setupReverseRelation: function() {
             if (!this.store.getRegistry().has(this.relatedStore)) {
                 return;
             }
@@ -2012,7 +2035,7 @@ define(['./polyfill'], function() {
         getQueryEngine: function() {
             return this._queryEngine;
         },
-        restoreInstance: function(record) {
+        restoreObject: function(record) {
             var obj = this._mapper.isLoaded(record) ? record : this._mapper.load(record);
             this._setInitObjectState(obj);
             return obj;
@@ -2046,6 +2069,12 @@ define(['./polyfill'], function() {
         getRequiredIndexes: function() {
             var indexes = AbstractStore.prototype.getRequiredIndexes.call(this);
             return indexes.concat(this.getObjectAccessor().pk).filter(arrayUniqueFilter);
+        },
+        getLocalStore: function() {
+            return this;
+        },
+        getRemoteStore: function() {
+            return this;
         },
         _prepareQuery: function(queryEngine, query) {
             return new PrepareQuery(queryEngine, query).compute();
@@ -2105,7 +2134,7 @@ define(['./polyfill'], function() {
             return Promise.resolve(obj);
         },
         decompose: function(record) {
-            var obj = this.restoreInstance(record);
+            var obj = this.restoreObject(record);
             return this.add(obj);
         },
         clean: function() {
@@ -2136,7 +2165,7 @@ define(['./polyfill'], function() {
             }
         },
         add: function(obj, state) {
-            obj = this.restoreInstance(obj);
+            obj = this.restoreObject(obj);
             if (!this.getObjectAccessor().pkExists(obj)) {
                 this.setNextPk(obj);
                 if (!this.getObjectAccessor().pkExists(obj)) {
@@ -2266,7 +2295,7 @@ define(['./polyfill'], function() {
                     }
                 }));
             }).then(function(obj) {
-                return self.restoreInstance(obj);
+                return self.restoreObject(obj);
             });
 
         },
@@ -2287,7 +2316,7 @@ define(['./polyfill'], function() {
                 }));
             }).then(function(objectList) {
                 for (var i = 0; i < objectList.length; i++) {
-                    objectList[i] = self.restoreInstance(objectList[i]);
+                    objectList[i] = self.restoreObject(objectList[i]);
                 }
                 return objectList;
             });
@@ -2999,14 +3028,23 @@ define(['./polyfill'], function() {
     }, Object.create(IObservable.prototype));
 
 
+    function DummyStoreObservable(subject) {
+        return DummyObservable.call(this, subject);
+    }
+    DummyStoreObservable.prototype = clone({
+        constructor: DummyStoreObservable,
+        attachByAttr: function(attrs, defaultValue, observer) {
+            return new Disposable(this, attrs, observer);
+        }
+    }, Object.create(DummyObservable.prototype));
+
+
     function DummyResultObservable(subject) {
         return DummyObservable.call(this, subject);
     }
     DummyResultObservable.prototype = clone({
         constructor: DummyResultObservable,
-        attachByAttr: function(attrs, defaultValue, observer) {
-            return new Disposable(this, attrs, observer);
-        }
+        attachByAttr: DummyStoreObservable.prototype.attachByAttr
     }, Object.create(DummyObservable.prototype));
 
 
