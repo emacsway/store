@@ -278,9 +278,9 @@ Store events
 Events by ObservableStoreAspect
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-============       =============================================
+=================  =============================================
 Event              When notified
-============       =============================================
+=================  =============================================
 "add"              on object is added to store, triggered by :func:`Store.prototype.add`
 
 "update"           on object is updated in store, triggered by :func:`Store.prototype.update`
@@ -292,7 +292,7 @@ Event              When notified
 "destroy"          immediately before store is destroyed, triggered by :func:`Store.prototype.destroy`
                    Usually used to kill
                    `reference cycles <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Memory_Management>`__.
-============       =============================================
+=================  =============================================
 
 
 Store events by PreObservableStoreAspect
