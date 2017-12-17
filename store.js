@@ -1892,7 +1892,7 @@ define(['./polyfill'], function() {
             var self = this;
             var deleted = Array.prototype.filter.call(oldObjectList, function(i) { return newObjectList.indexOf(i) === -1; });
             var added = Array.prototype.filter.call(newObjectList, function(i) { return oldObjectList.indexOf(i) === -1; });
-            deleted.reverse();  // To preserve indexes fixed on changed array, we bagin from tail.
+            deleted.reverse();  // To preserve indexes fixed on array changing, we begin from tail.
             for (var i = 0; i < deleted.length; i++) {
                 self.observed().notify('delete', deleted[i], oldObjectList.indexOf(deleted[i]));
             };
