@@ -866,12 +866,35 @@ define(['./polyfill'], function() {
         _executeRight: function(left, right, objectAccessor, context) {
             var result = true;
             for (var key in right) {
-                result = result && this.get(key).call(this, [left, right[key]], objectAccessor, context);
+                result = result && this._lookupThroughAggregate(left, key, right[key], objectAccessor, context);
                 if (!result) {
                     return result;
                 }
             }
             return result;
+        },
+        _lookupThroughAggregate: function(path, op, value, objectAccessor, context) {
+            if (path.indexOf('.') !== -1) {
+                var result = false;
+                var pathParts = path.split('.');
+                var field = pathParts.shift();
+                var subPath = pathParts.join('.');
+                var subContexts = objectAccessor.getValue(context, field);
+                subContexts = toArray(subContexts);
+                for (var i = 0; i < subContexts.length; i++) {
+                    var subContext = subContexts[i];
+                    if (!subContext) {
+                        continue;
+                    }
+                    result = result || this._lookupThroughAggregate(subPath, op, value, objectAccessor, subContext);
+                    if (result) {
+                        return result;
+                    }
+                }
+                return result;
+            } else {
+                return this.get(op).call(this, [path, value], objectAccessor, context);
+            }
         }
     }, Object.create(AbstractQueryEngine.prototype));
 
@@ -1892,7 +1915,7 @@ define(['./polyfill'], function() {
             var self = this;
             var deleted = Array.prototype.filter.call(oldObjectList, function(i) { return newObjectList.indexOf(i) === -1; });
             var added = Array.prototype.filter.call(newObjectList, function(i) { return oldObjectList.indexOf(i) === -1; });
-            deleted.reverse();  // To preserve indexes fixed on changed array, we bagin from tail.
+            deleted.reverse();  // To preserve indexes fixed on array changing, we begin from tail.
             for (var i = 0; i < deleted.length; i++) {
                 self.observed().notify('delete', deleted[i], oldObjectList.indexOf(deleted[i]));
             };
