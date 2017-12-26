@@ -873,7 +873,7 @@ define(['./polyfill'], function() {
             }
             return result;
         },
-        _lookupThroughAggregate: function(path, op, value, objectAccessor, context) {
+        _lookupThroughAggregate: function(path, op, required, objectAccessor, context) {
             if (path.indexOf('.') !== -1) {
                 var result = false;
                 var pathParts = path.split('.');
@@ -886,14 +886,14 @@ define(['./polyfill'], function() {
                     if (!subContext) {
                         continue;
                     }
-                    result = result || this._lookupThroughAggregate(subPath, op, value, objectAccessor, subContext);
+                    result = result || this._lookupThroughAggregate(subPath, op, required, objectAccessor, subContext);
                     if (result) {
                         return result;
                     }
                 }
                 return result;
             } else {
-                return this.get(op).call(this, [path, value], objectAccessor, context);
+                return this.get(op).call(this, [path, required], objectAccessor, context);
             }
         }
     }, Object.create(AbstractQueryEngine.prototype));
