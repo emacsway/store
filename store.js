@@ -1,8 +1,8 @@
-define(['./polyfill'], function() {
-
+(function() {
+function namespace(root) {
     'use strict';
 
-    var Promise = window.Promise;
+    var Promise = root.Promise;
 
 
     function IStore() {
@@ -179,7 +179,7 @@ define(['./polyfill'], function() {
             return this._localStore.add(obj);
         },
         fill: function(options, callback) {  // TODO: Deprecated. Remove me.
-            window.console && window.console.warn("Store.prototype.fill() is deprecated! Use Store.prototype.pull() instead!");
+            root.console && root.console.warn("Store.prototype.fill() is deprecated! Use Store.prototype.pull() instead!");
             options = options || {};
             var query = options.query;
             if (query) { delete options.query; }
@@ -2298,7 +2298,7 @@ define(['./polyfill'], function() {
         options || (options = {});
         AbstractLeafStore.call(this, options);
         this._url = options.url;
-        this._jQuery = options.jQuery || window.jQuery;
+        this._jQuery = options.jQuery || root.jQuery;
         this._requestOptions = options.requestOptions || {};
     }
     RestStore.prototype = clone({
@@ -3463,4 +3463,25 @@ define(['./polyfill'], function() {
         when: when,
         whenIter: whenIter
     };
-});
+}
+
+if (typeof self === 'object' && self.self === self) {
+    var root = self;
+} else if (typeof global === 'object' && global.global === global) {
+    var root = global;
+} else {
+    var root = {};
+}
+if (typeof define === 'function' && define.amd) {
+    define(['./polyfill'], function() {
+        return namespace(root);
+    });
+} else if (typeof exports !== 'undefined' && !exports.nodeType) {
+    if (typeof module !== 'undefined' && !module.nodeType && module.exports) {
+        module.require('./polyfill');
+        module.exports = namespace(root);
+    }
+} else {
+    root.store = namespace(root);
+}
+}());

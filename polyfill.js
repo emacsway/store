@@ -1,4 +1,5 @@
-define(function() {
+(function() {
+function namespace(root) {
 
     'use strict';
 
@@ -412,6 +413,24 @@ define(function() {
     root.Promise = Promise;
   }
 
-})(window);
+})(root);
+return {};
+}
 
-});
+if (typeof self === 'object' && self.self === self) {
+    var root = self;
+} else if (typeof global === 'object' && global.global === global) {
+    var root = global;
+} else {
+    var root = {};
+}
+if (typeof define === 'function' && define.amd) {
+    define([], function() {
+        return namespace(root);
+    });
+} else if (typeof exports !== 'undefined' && !exports.nodeType) {
+    if (typeof module !== 'undefined' && !module.nodeType && module.exports) {
+        module.exports = namespace(root);
+    }
+}
+}());
