@@ -1550,7 +1550,7 @@ function namespace(root) {
             var self = this,
                 localStore = this._store.getLocalStore();
             return when(self._handleForeignKey(), function() {
-                return when(resolveRejection(rejectException(localStore.add, localStore, [self._obj]), function(reason) {
+                return when(resolveRejection(rejectException(localStore.add, localStore, self._obj), function(reason) {
                     if (reason instanceof ObjectAlreadyAdded) {
                         // Make object to be single instance;
                         // TODO: Merge new object's state into old object's instance?
@@ -3356,9 +3356,9 @@ function namespace(root) {
     }
 
 
-    function rejectException(callback, thisArg, args) {
+    function rejectException(callback, thisArg) {
         try {
-            return callback.apply(thisArg, args);
+            return callback.apply(thisArg, Array.prototype.slice.call(arguments, 2));
         } catch (e) {
             return Promise.reject(e);
         }
