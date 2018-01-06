@@ -130,7 +130,7 @@ function namespace(root) {
             } else if (options.pk) {
                 var pk = options.pk;
             } else {
-                throw Error("Pk is required!");
+                var pk = 'id';
             }
             var remoteStore = pk instanceof Array ? new DummyStore(options) : new AutoIncrementStore(options);
             this._remoteStore = withAspect(ObservableStoreAspect, remoteStore).init();
@@ -2046,6 +2046,7 @@ function namespace(root) {
         options || (options = {});
         this._mapper = options.mapper ? options.mapper : new Mapper({
             model: options.model,
+            aspects: options.aspects,
             objectAccessor: options.objectAccessor,
             pk: options.pk
         });
@@ -2143,7 +2144,9 @@ function namespace(root) {
             return Promise.resolve([]);
         },
         add: function(obj, state) {
-            this.setNextPk(obj);
+            if (!this.getObjectAccessor().pkExists(obj)) {
+                this.setNextPk(obj);
+            }
             this._setInitObjectState(obj);
             return Promise.resolve(obj);
         },
@@ -2445,9 +2448,11 @@ function namespace(root) {
     function Mapper(options) {
         options = options || {};
         this._model = options.model || DefaultModel;
+        this._aspects = options.aspects || [];
         this._mapping = options.mapping || {};
         this._objectAccessor = options.objectAccessor || new ObjectAccessor(options.pk);
         this._reverseMapping = this.makeReverseMapping(this._mapping);
+        this.load = this._aspects.length ? this._aspectedLoad : this._simpleLoad;
     }
     Mapper.prototype = {
         constructor: Mapper,
@@ -2460,7 +2465,7 @@ function namespace(root) {
             }
             return reverseMapping;
         },
-        load: function(record) {
+        _simpleLoad: function(record) {
             var data = {};
             for (var key in record) {
                 if (record.hasOwnProperty(key)) {
@@ -2468,6 +2473,16 @@ function namespace(root) {
                 }
             }
             return new this._model(data);
+        },
+        _aspectedLoad: function(record) {
+            var obj = new this._model({});
+            for (var i = this._aspects.length - 1; i >= 0; i--) {
+                var aspect = toArray(this._aspects[i]);
+                obj = withAspect.apply(undefined, [aspect[0], obj].concat(aspect.slice(1)));
+            }
+            obj.init();
+            this.update(record, obj);
+            return obj;
         },
         update: function(record, obj) {
             for (var key in record) {
