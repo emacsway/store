@@ -1,8 +1,8 @@
-define(['./polyfill'], function() {
-
+(function() {
+function namespace(root) {
     'use strict';
 
-    var Promise = window.Promise;
+    var Promise = root.Promise;
 
 
     function IStore() {
@@ -130,7 +130,7 @@ define(['./polyfill'], function() {
             } else if (options.pk) {
                 var pk = options.pk;
             } else {
-                throw Error("Pk is required!");
+                var pk = 'id';
             }
             var remoteStore = pk instanceof Array ? new DummyStore(options) : new AutoIncrementStore(options);
             this._remoteStore = withAspect(ObservableStoreAspect, remoteStore).init();
@@ -179,7 +179,7 @@ define(['./polyfill'], function() {
             return this._localStore.add(obj);
         },
         fill: function(options, callback) {  // TODO: Deprecated. Remove me.
-            window.console && window.console.warn("Store.prototype.fill() is deprecated! Use Store.prototype.pull() instead!");
+            root.console && root.console.warn("Store.prototype.fill() is deprecated! Use Store.prototype.pull() instead!");
             options = options || {};
             var query = options.query;
             if (query) { delete options.query; }
@@ -873,7 +873,7 @@ define(['./polyfill'], function() {
             }
             return result;
         },
-        _lookupThroughAggregate: function(path, op, value, objectAccessor, context) {
+        _lookupThroughAggregate: function(path, op, required, objectAccessor, context) {
             if (path.indexOf('.') !== -1) {
                 var result = false;
                 var pathParts = path.split('.');
@@ -886,14 +886,14 @@ define(['./polyfill'], function() {
                     if (!subContext) {
                         continue;
                     }
-                    result = result || this._lookupThroughAggregate(subPath, op, value, objectAccessor, subContext);
+                    result = result || this._lookupThroughAggregate(subPath, op, required, objectAccessor, subContext);
                     if (result) {
                         return result;
                     }
                 }
                 return result;
             } else {
-                return this.get(op).call(this, [path, value], objectAccessor, context);
+                return this.get(op).call(this, [path, required], objectAccessor, context);
             }
         }
     }, Object.create(AbstractQueryEngine.prototype));
@@ -1136,9 +1136,9 @@ define(['./polyfill'], function() {
             return clone(obj, {});
         },
         pkExists: function(obj) {
-            return !!toArray(this.getPk(obj)).filter(function(val) {
+            return toArray(this.getPk(obj)).filter(function(val) {
                 return val !== null && typeof val !== "undefined";
-            }).length;
+            }).length === toArray(this.pk).length;
         },
         setTmpPk: function(obj) {
             var pkValue = this.getPk(obj);
@@ -2046,6 +2046,7 @@ define(['./polyfill'], function() {
         options || (options = {});
         this._mapper = options.mapper ? options.mapper : new Mapper({
             model: options.model,
+            aspects: options.aspects,
             objectAccessor: options.objectAccessor,
             pk: options.pk
         });
@@ -2143,7 +2144,9 @@ define(['./polyfill'], function() {
             return Promise.resolve([]);
         },
         add: function(obj, state) {
-            this.setNextPk(obj);
+            if (!this.getObjectAccessor().pkExists(obj)) {
+                this.setNextPk(obj);
+            }
             this._setInitObjectState(obj);
             return Promise.resolve(obj);
         },
@@ -2298,7 +2301,7 @@ define(['./polyfill'], function() {
         options || (options = {});
         AbstractLeafStore.call(this, options);
         this._url = options.url;
-        this._jQuery = options.jQuery || window.jQuery;
+        this._jQuery = options.jQuery || root.jQuery;
         this._requestOptions = options.requestOptions || {};
     }
     RestStore.prototype = clone({
@@ -2445,9 +2448,11 @@ define(['./polyfill'], function() {
     function Mapper(options) {
         options = options || {};
         this._model = options.model || DefaultModel;
+        this._aspects = options.aspects || [];
         this._mapping = options.mapping || {};
         this._objectAccessor = options.objectAccessor || new ObjectAccessor(options.pk);
         this._reverseMapping = this.makeReverseMapping(this._mapping);
+        this.load = this._aspects.length ? this._aspectedLoad : this._simpleLoad;
     }
     Mapper.prototype = {
         constructor: Mapper,
@@ -2460,7 +2465,7 @@ define(['./polyfill'], function() {
             }
             return reverseMapping;
         },
-        load: function(record) {
+        _simpleLoad: function(record) {
             var data = {};
             for (var key in record) {
                 if (record.hasOwnProperty(key)) {
@@ -2468,6 +2473,16 @@ define(['./polyfill'], function() {
                 }
             }
             return new this._model(data);
+        },
+        _aspectedLoad: function(record) {
+            var obj = new this._model({});
+            for (var i = this._aspects.length - 1; i >= 0; i--) {
+                var aspect = toArray(this._aspects[i]);
+                obj = withAspect.apply(undefined, [aspect[0], obj].concat(aspect.slice(1)));
+            }
+            obj.init();
+            this.update(record, obj);
+            return obj;
         },
         update: function(record, obj) {
             for (var key in record) {
@@ -3463,4 +3478,25 @@ define(['./polyfill'], function() {
         when: when,
         whenIter: whenIter
     };
-});
+}
+
+if (typeof self === 'object' && self.self === self) {
+    var root = self;
+} else if (typeof global === 'object' && global.global === global) {
+    var root = global;
+} else {
+    var root = {};
+}
+if (typeof define === 'function' && define.amd) {
+    define(['./polyfill'], function() {
+        return namespace(root);
+    });
+} else if (typeof exports !== 'undefined' && !exports.nodeType) {
+    if (typeof module !== 'undefined' && !module.nodeType && module.exports) {
+        module.require('./polyfill');
+        module.exports = namespace(root);
+    }
+} else {
+    root.store = namespace(root);
+}
+}());
