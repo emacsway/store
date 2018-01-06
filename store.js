@@ -2450,6 +2450,71 @@ function namespace(root) {
     function DefaultModel(attrs) { clone(attrs, this); }
 
 
+    function RelationalAccessorModelAspectFactory(getterNameFactory) {
+        var factory = this;
+        this._getterNameFactory = getterNameFactory || function(relationName) {
+            return ('get' + relationName.charAt(0).toUpperCase() +
+                    relationName.slice(1).replace(/[_-]([a-z])/g, function (g) {
+                        return g[1].toUpperCase();
+                    }));
+        };
+        this._aspect = {
+            init: function(storeAccessor) {
+                factory.initAspect(this, storeAccessor());
+            }
+        };
+    }
+    RelationalAccessorModelAspectFactory.prototype = {
+        constructor: RelationalAccessorModelAspectFactory,
+        compute: function() {
+            return this._aspect;
+        },
+        initAspect: function(aspect, store) {
+            this._handleForeignKey(aspect, store);
+            this._handleOneToMany(aspect, store);
+            this._handleManyToMany(aspect, store);
+        },
+        _handleForeignKey: function(aspect, store) {
+            var self = this;
+            keys(store.relations.foreignKey).forEach(function(relationName) {
+                var relation = store.relations.foreignKey[relationName];
+                aspect[self._getterNameFactory(relationName)] = self._makeObjectGetter(relation);
+            });
+        },
+        _handleOneToMany: function(aspect, store) {
+            var self = this;
+            keys(store.relations.oneToMany).forEach(function(relationName) {
+                var relation = store.relations.oneToMany[relationName];
+                aspect[self._getterNameFactory(relationName)] = self._makeCollectionGetter(relation);
+            });
+        },
+        _handleManyToMany: function(aspect, store) {
+            var self = this;
+            keys(store.relations.manyToMany).forEach(function(relationName) {
+                var relation = store.relations.oneToMany[relationName];
+                aspect[self._getterNameFactory(relationName)] = self._makeCollectionGetter(relation);
+            });
+        },
+        _makeCollectionGetter: function(relation) {
+            return function(query) {
+                var obj = this;
+                var relatedStore = relation.getRelatedStore();
+                var finalQuery = relation.getRelatedQuery(obj);
+                clone(query, finalQuery);
+                return relatedStore.find(finalQuery);
+            };
+        },
+        _makeObjectGetter: function(relation) {
+            return function() {
+                var obj = this;
+                var relatedStore = relation.getRelatedStore();
+                var finalQuery = relation.getRelatedQuery(obj);
+                return relatedStore.get(finalQuery);
+            };
+        }
+    };
+
+
     function Mapper(options) {
         options = options || {};
         this._model = options.model || DefaultModel;
@@ -2481,8 +2546,8 @@ function namespace(root) {
                 var aspect = toArray(this._aspects[i]);
                 obj = withAspect.apply(undefined, [aspect[0], obj].concat(aspect.slice(1)));
             }
-            obj.init && obj.init();
             this._model.call(obj, data);
+            obj.init && obj.init();
             return obj;
         },
         update: function(record, obj) {
@@ -3463,6 +3528,7 @@ function namespace(root) {
         withMixins: withMixins,
         withMixin: withMixin,
         DefaultModel: DefaultModel,
+        RelationalAccessorModelAspectFactory: RelationalAccessorModelAspectFactory,
         Mapper: Mapper,
         Observable: Observable,
         observe: observe,

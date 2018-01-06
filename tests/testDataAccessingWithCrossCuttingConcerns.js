@@ -45,17 +45,21 @@ define(['../store', './utils'], function(store, utils) {
         };
 
 
+        // We can create aspect manually
         var OrderRelationsAspect = {
-            init: function(registry) {
-                this._registry = registry;
-                // We can create accessors automatically using relations declaration from the store
+            init: function(storeAccessor) {
+                this._getStore = storeAccessor;
             },
             getItems: function() {
-                return when(this._registry.get('item').find({order_id: this.id}), function(items) {
+                return when(this._getStore().getRegistry().get('item').find({order_id: this.id}), function(items) {
                     return items.toArray();
                 });
             }
         };
+
+
+        // Or we can create aspect automatically using relations declaration from the store
+        var OrderRelationsAspect = new store.RelationalAccessorModelAspectFactory().compute();
 
 
         var OrderRelationsStubAspect = {
@@ -75,7 +79,7 @@ define(['../store', './utils'], function(store, utils) {
 
         var orderStore = new store.Store({
             model: Order,
-            aspects: [[OrderRelationsAspect, registry]]
+            aspects: [[OrderRelationsAspect, function() { return registry.get('order'); }]]
         });
         registry.register('order', orderStore);
 
