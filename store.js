@@ -2364,7 +2364,12 @@ function namespace(root) {
                     }
                 }));
             }).then(function(response) {
-                self._mapper.update(response, obj); // TODO: the obj can be an aggregate? Use decompose with merging?
+                // TODO: the obj can be an aggregate? Use decompose with merging?
+                // Aggregate is the boundary of transaction.
+                // Usually aggregate uses optimistic offline lock of whole aggregate
+                // for concurrency control.
+                // So, we don't have to sync aggregate here, but we have to set at least PK and default values.
+                self._mapper.update(response, obj);
                 self._setInitObjectState(obj);
                 return obj;
             });
