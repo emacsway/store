@@ -1136,9 +1136,9 @@ function namespace(root) {
             return clone(obj, {});
         },
         pkExists: function(obj) {
-            return !!toArray(this.getPk(obj)).filter(function(val) {
+            return toArray(this.getPk(obj)).filter(function(val) {
                 return val !== null && typeof val !== "undefined";
-            }).length;
+            }).length === toArray(this.pk).length;
         },
         setTmpPk: function(obj) {
             var pkValue = this.getPk(obj);

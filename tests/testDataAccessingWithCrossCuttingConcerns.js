@@ -108,7 +108,7 @@ define(['../store', './utils'], function(store, utils) {
             {id: 2, price: new Money(200), quantity: 10, order_id: 1, product_id: 102}
         ]).init();
         assert(order instanceof Order);
-        when(order.getPriceTotal(), function(price) {
+        return when(order.getPriceTotal(), function(price) {
             assert(price.amount === 2500);
 
             // Ok, now testing an order with repository
