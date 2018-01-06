@@ -44,6 +44,7 @@ define(['../store', './utils'], function(store, utils) {
             }
         };
 
+
         var OrderRelationsAspect = {
             init: function(registry) {
                 this._registry = registry;
@@ -56,6 +57,7 @@ define(['../store', './utils'], function(store, utils) {
             }
         };
 
+
         var OrderRelationsStubAspect = {
             init: function(items) {
                 this._items = items;
@@ -65,9 +67,11 @@ define(['../store', './utils'], function(store, utils) {
             }
         };
 
+
         function Item(attrs) {
             clone(attrs, this);
         }
+
 
         var orderStore = new store.Store({
             model: Order,
