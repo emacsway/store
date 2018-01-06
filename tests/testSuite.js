@@ -16,6 +16,7 @@ define([
     './testStoreObservable',
     './testResult',
     './testTransaction',
+    './testDataAccessingWithCrossCuttingConcerns',
 
     './MemoryStoreTests/testSimpleRelationsMemoryStore',
 

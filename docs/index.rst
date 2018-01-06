@@ -10,6 +10,8 @@ Welcome to Store.js' documentation!
 Store.js is a super lightweight implementation of Repository_ pattern for relational data and aggregates.
 The library allows you to use Domain-Driven Design (DDD) on client-side as well as reactive programming.
 
+This is similar to Object-Relational Mapping (ORM) for JavaScript, including the Data Mapper pattern (the data can be mapped between objects and a persistent data storage).
+
 
 Canonical repo
 --------------
@@ -109,20 +111,32 @@ Store public API
 ----------------
 
 
-.. class:: Store([pkOrObjectAccessor[, indexesOrLocalStore[, relations[, remoteStore[, modelOrMapper]]]]])
+.. class:: Store([options])
 
-   :param pkOrObjectAccessor: the name of Primary Key (or list of names of composite Primary Key) or :class:`ObjectAccessor` instance.
-   :type pkOrObjectAccessor: string or Array[string] or ObjectAccessor
-   :param indexesOrLocalStore: the array of field names to be indexed for fast finding or instance of local store. \
-      Note, all field used by relations or primary key will be indexed automatically.
-   :type indexesOrLocalStore: Array[string] or IStore
+   :param Object options: the keyword arguments.
+
+   The ``options`` object can have the next keys:
+
+   :param options.pk: the name of Primary Key or list of names of composite Primary Key.\
+       Optional. The default value is 'id'.
+   :type options.pk: string or Array[string]
+   :param ObjectAccessor objectAccessor: an instance of :class:`ObjectAccessor`.
+       Optional. By default will be created on fly using ``options.pk``.
+   :param Array[string] options.indexes: the array of field names to be indexed for fast finding or instance of local store.\
+       Note, all field used by relations or primary key will be indexed automatically.\
+       Optional.
+   :type IStore localStore: an instance of :class:`IStore`. Optional.\
+       By default will be created on fly using ``options``
+   :param IStore remoteStore: an instance of :class:`IStore`. Optional.\
+       By default will be created on fly using ``options``
+   :param function model: the model constructor, which should be applied before to add object into the store.\
+       Can be usefull in combination with :func:`Store.prototype.decompose`.\
+       Optional. The default value is :class:`DefaultModel`
+   :param Mapper mapper: an instance of :class:`Mapper`. Optional.\
+       Optioans. By default will be created on fly using ``options.model``
    :param Object relations: the dictionary describes the schema relations.
-   :param IStore remoteStore: implements the Gateway_ pattern
-   :param modelOrMapper: the model constructor, which should be applied before to add object into the store. \
-      Can be usefull in combination with :func:`Store.prototype.decompose`.
-   :type modelOrMapper: function or Mapper
 
-   Format of ``relations`` argument::
+   The format of ``options.relations`` argument::
 
       {
           foreignKey: {
@@ -169,6 +183,10 @@ Store public API
 
    If oneToMany is not defined, it will be built automatically from foreignKey of related store.
    In case the foreignKey don't has relatedName key, a new relatedName will be generated from the store name and "Set" suffix.
+
+   | If ``options.objectAccessor`` is provided, the ``options.pk`` will be ignored.
+   | If ``options.mapper`` is provided, the ``options.model`` and ``options.objectAccessor`` will be ignored.
+   | If ``options.localStorage`` is provided, the ``options.indexes`` will be ignored.
 
    The public method of Store:
 
@@ -260,19 +278,21 @@ Store events
 Events by ObservableStoreAspect
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-============  =============================================
-Event         When notified
-============  =============================================
-"add"         on object is added to store, triggered by :func:`Store.prototype.add`
+=================  =============================================
+Event              When notified
+=================  =============================================
+"add"              on object is added to store, triggered by :func:`Store.prototype.add`
 
-"update"      on object is updated in store, triggered by :func:`Store.prototype.update`
+"update"           on object is updated in store, triggered by :func:`Store.prototype.update`
 
-"delete"      on object is deleted from store, triggered by :func:`Store.prototype.delete`
+"delete"           on object is deleted from store, triggered by :func:`Store.prototype.delete`
 
-"destroy"     immediately before store is destroyed, triggered by :func:`Store.prototype.destroy`
-              Usually used to kill
-              `reference cycles <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Memory_Management>`__.
-============  =============================================
+"restoreObject"    on object is restored, triggered by :func:`Store.prototype.delete`
+
+"destroy"          immediately before store is destroyed, triggered by :func:`Store.prototype.destroy`
+                   Usually used to kill
+                   `reference cycles <https://developer.mozilla.org/en-US/docs/Web/JavaScript/Memory_Management>`__.
+=================  =============================================
 
 
 Store events by PreObservableStoreAspect
@@ -920,7 +940,7 @@ Alternatives, related and useful links
 - `Dojo1 Store <https://dojotoolkit.org/reference-guide/1.10/dojo/store.html>`_ - \
   Dojo1 implementation of `Repository`_ pattern.
 - `JS-Data <http://www.js-data.io/>`_ - \
-  ORM written by JavaScript for relational data. Does not support composite relations.
+  Object-Relational Mapping (ORM) written by JavaScript for relational data. Does not support composite relations.
 - `Normalizr <https://github.com/paularmstrong/normalizr>`_ - \
   Normalizes (decomposes) nested JSON according to a schema.
 - `Denormalizr <https://github.com/gpbl/denormalizr>`_ - \
