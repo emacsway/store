@@ -241,6 +241,11 @@ function namespace(root) {
             }, function() {  // onAutoCommit
                 var dirty = this;
                 return when(dirty.store.getRemoteStore().add(dirty.obj), function(obj) {
+                    // TODO: the obj can be an aggregate? Use decompose with merging strategy?
+                    // Aggregate is the boundary of transaction.
+                    // Usually aggregate uses optimistic offline lock of whole aggregate
+                    // for concurrency control.
+                    // So, we don't have to sync aggregate here, but we have to set at least PK and default values.
                     return when(dirty.store._localStore.add(dirty.obj), function(obj) {
                         dirty.obj = obj;
                         return when(obj);
@@ -1619,8 +1624,7 @@ function namespace(root) {
             clone(oldObj, newObj, function(obj, attr, value) {
                 return store.getObjectAccessor().setValue(obj, attr, value);
             });
-            store.setInitObjectState(newObj);
-            return newObj;
+            return store.getLocalStore().update(newObj);
         },
         _handleForeignKey: function() {
             var self = this;
@@ -1644,16 +1648,16 @@ function namespace(root) {
                 }
                 var relation = self._store.relations.oneToMany[relationName];
                 var relatedStore = relation.getRelatedStore();
-                var newRelatedRecordList = self._store.getObjectAccessor().getValue(self._obj, relationName) || [];
+                var newRelatedObjectList = self._store.getObjectAccessor().getValue(self._obj, relationName) || [];
                 // When we add an aggregate to a single endpoint,
                 // the all child of the aggregate in the memory don't have PK,
                 // thus, we have to associate child manually based on their order.
                 var oldRelatedQueryResult = relatedStore.find(relation.getRelatedQuery(self._obj));
                 // TODO: Set here the reactive result to the object?
-                return whenIter(newRelatedRecordList, function(relatedObj, i) {
+                return whenIter(newRelatedObjectList, function(relatedObj, i) {
                     self._setForeignKeyToRelatedObj(self._obj, relation, relatedObj);
                     return when(self._handleRelatedObj(relatedStore, relatedObj, oldRelatedQueryResult[i]), function(relatedObj) {
-                        newRelatedRecordList[i] = relatedObj;
+                        newRelatedObjectList[i] = relatedObj;
                     });
                 });
             });
@@ -2423,11 +2427,6 @@ function namespace(root) {
                     }
                 }));
             }).then(function(response) {
-                // TODO: the obj can be an aggregate? Use decompose with merging?
-                // Aggregate is the boundary of transaction.
-                // Usually aggregate uses optimistic offline lock of whole aggregate
-                // for concurrency control.
-                // So, we don't have to sync aggregate here, but we have to set at least PK and default values.
                 self._mapper.update(response, obj);
                 self.setInitObjectState(obj);
                 return obj;
