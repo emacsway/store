@@ -1577,6 +1577,7 @@ function namespace(root) {
         this._store = store;
         this._obj = obj;
         this._associatedObj = associatedObj;
+        this._previousState = {};
         this._onConflict = onConflict || this._defaultOnConflict;
     }
     Decompose.prototype = {
@@ -1586,14 +1587,18 @@ function namespace(root) {
                 localStore = this._store.getLocalStore();
             return when(self._handleForeignKey(), function() {
                 if (self._associatedObj) {
+                    self._previousState = self._store.getObjectAccessor().getObjectState(self._associatedObj);
                     self._associatedObj = self._onConflict(self._store, self._obj, self._associatedObj);
                 } else {
                     self._associatedObj = when(resolveRejection(rejectException(localStore.add, localStore, self._obj), function(reason) {
                         if (reason instanceof ObjectAlreadyAdded) {
                             // Make object to be single instance;
-                            return self._onConflict(self._store, self._obj, localStore.get(
+                            return when(localStore.get(
                                 localStore.getObjectAccessor().getPk(self._obj)
-                            ));
+                            ), function(associatedObj) {
+                                self._previousState = self._store.getObjectAccessor().getObjectState(associatedObj);
+                                return self._onConflict(self._store, self._obj, associatedObj);
+                            });
                         } else {
                             return Promise.reject(reason);
                         }
@@ -1641,11 +1646,14 @@ function namespace(root) {
                 // When we add an aggregate to a single endpoint,
                 // the all child of the aggregate in the memory don't have PK,
                 // thus, we have to associate child manually based on their order.
-                var oldRelatedQueryResult = relatedStore.find(relation.getRelatedQuery(self._obj));
+                var oldRelatedObjectList = self._previousState[relationName] || [];
+                if (!oldRelatedObjectList.length) {
+                    oldRelatedObjectList = relatedStore.findList(relation.getRelatedQuery(self._obj));
+                }
                 // TODO: Set here the reactive result to the object?
                 return whenIter(newRelatedObjectList, function(relatedObj, i) {
                     self._setForeignKeyToRelatedObj(self._obj, relation, relatedObj);
-                    return when(self._handleRelatedObj(relatedStore, relatedObj, oldRelatedQueryResult[i]), function(relatedObj) {
+                    return when(self._handleRelatedObj(relatedStore, relatedObj, oldRelatedObjectList[i]), function(relatedObj) {
                         newRelatedObjectList[i] = relatedObj;
                     });
                 });
