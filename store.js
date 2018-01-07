@@ -1568,9 +1568,12 @@ function namespace(root) {
     };
 
 
-    function Decompose(store, obj) {
+    function Decompose(store, obj, onConflictStrategy, onChildConflictStrategy) {
         this._store = store;
         this._obj = obj;
+        this._onConflictStrategy = onConflictStrategy || function(newObj, oldObj) {
+            return oldObj;
+        };
     }
     Decompose.prototype = {
         constructor: Decompose,
@@ -1582,7 +1585,7 @@ function namespace(root) {
                     if (reason instanceof ObjectAlreadyAdded) {
                         // Make object to be single instance;
                         // TODO: Merge new object's state into old object's instance?
-                        return localStore.get(localStore.getObjectAccessor().getPk(self._obj));
+                        return self._onConflictStrategy(self._obj, localStore.get(localStore.getObjectAccessor().getPk(self._obj)));
                     } else {
                         return Promise.reject(reason);
                     }
