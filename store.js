@@ -30,12 +30,6 @@ function namespace(root) {
         getInitObjectState: function(obj) {
             throw Error("Not Implemented Error");
         },
-        setInitObjectState: function(obj) {
-            throw Error("Not Implemented Error");
-        },
-        delInitObjectState: function(obj) {
-            throw Error("Not Implemented Error");
-        },
         getQueryEngine: function() {
             throw Error("Not Implemented Error");
         },
@@ -167,12 +161,6 @@ function namespace(root) {
             return this._remoteStore.setNextPk(obj);
         },
         getInitObjectState: function(obj) {
-            return this._localStore.getInitObjectState(obj);
-        },
-        setInitObjectState: function(obj) {
-            return this._localStore.getInitObjectState(obj);
-        },
-        delInitObjectState: function(obj) {
             return this._localStore.getInitObjectState(obj);
         },
         restoreObject: function(record) {
@@ -2124,17 +2112,17 @@ function namespace(root) {
         },
         restoreObject: function(record) {
             var obj = this._mapper.isLoaded(record) ? record : this._mapper.load(record);
-            this.setInitObjectState(obj);
+            this._setInitObjectState(obj);
             return obj;
         },
         getInitObjectState: function(obj) {
             var oid = this._getObjectId(obj);
             return this._objectStateMapping[oid];
         },
-        setInitObjectState: function(obj) {
+        _setInitObjectState: function(obj) {
             this._objectStateMapping[this._getObjectId(obj)] = this.getObjectAccessor().getObjectState(obj);
         },
-        delInitObjectState: function(obj) {
+        _delInitObjectState: function(obj) {
             delete this._objectStateMapping[this._getObjectId(obj)];
         },
         _getObjectId: function(obj) {
@@ -2210,16 +2198,16 @@ function namespace(root) {
             if (!this.getObjectAccessor().pkExists(obj)) {
                 this.setNextPk(obj);
             }
-            this.setInitObjectState(obj);
+            this._setInitObjectState(obj);
             return Promise.resolve(obj);
         },
         update: function(obj, state) {
             var old = this.getInitObjectState(obj);
-            this.setInitObjectState(obj);
+            this._setInitObjectState(obj);
             return Promise.resolve(obj);
         },
         delete: function(obj, state) {
-            this.delInitObjectState(obj);
+            this._delInitObjectState(obj);
             return Promise.resolve(obj);
         },
         decompose: function(record, onConflictStrategy, associatedObj) {
@@ -2271,13 +2259,13 @@ function namespace(root) {
             }
             this.objectList.push(obj);
             this._indexObj(obj);
-            this.setInitObjectState(obj);
+            this._setInitObjectState(obj);
             return obj;
         },
         update: function(obj, state) {
             var old = this.getInitObjectState(obj);
             this._reindexObj(old, obj);
-            this.setInitObjectState(obj);
+            this._setInitObjectState(obj);
             return obj;
         },
         delete: function(obj, state) {
@@ -2288,7 +2276,7 @@ function namespace(root) {
                 var value = objectAccessor.getValue(obj, field);
                 arrayRemove(this.indexes[field][value], obj);
             }
-            this.delInitObjectState(obj);
+            this._delInitObjectState(obj);
             return obj;
         },
         _get: function(pk) {
@@ -2428,7 +2416,7 @@ function namespace(root) {
                 }));
             }).then(function(response) {
                 self._mapper.update(response, obj);
-                self.setInitObjectState(obj);
+                self._setInitObjectState(obj);
                 return obj;
             });
         },
@@ -2450,7 +2438,7 @@ function namespace(root) {
                 }));
             }).then(function(response) {
                 self._mapper.update(response, obj);
-                self.setInitObjectState(obj);
+                self._setInitObjectState(obj);
                 return obj;
             });
         },
@@ -2468,7 +2456,7 @@ function namespace(root) {
                     }
                 }));
             }).then(function(obj) {
-                this.delInitObjectState(obj);
+                this._delInitObjectState(obj);
                 return obj;
             });
         },
