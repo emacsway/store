@@ -66,10 +66,10 @@ function namespace(root) {
         delete: function(obj, state) {
             throw Error("Not Implemented Error");
         },
-        compose: function(obj, state) {
+        compose: function(obj, allowedRelations, state) {
             throw Error("Not Implemented Error");
         },
-        decompose: function(record) {
+        decompose: function(record, onConflict, associatedObj) {
             throw Error("Not Implemented Error");
         },
         clean: function() {
@@ -108,7 +108,7 @@ function namespace(root) {
         },
         addIndex: function(index) {
         },
-        compose: function(obj, state) {
+        compose: function(obj, allowedRelations, state) {
             return obj;
         },
         destroy: function() {
@@ -174,7 +174,7 @@ function namespace(root) {
         addIndex: function(index) {
             return this._localStore.addIndex(index);
         },
-        decompose: function(record) {
+        decompose: function(record, onConflict, associatedObj) {
             var obj = this.restoreObject(record);
             return this._localStore.add(obj);
         },
@@ -226,9 +226,14 @@ function namespace(root) {
                     dirty.obj = obj;
                     return when(obj);
                 });
-            }, function() {  // onAutocommit
+            }, function() {  // onAutoCommit
                 var dirty = this;
                 return when(dirty.store.getRemoteStore().add(dirty.obj), function(obj) {
+                    // TODO: the obj can be an aggregate? Use decompose with merging strategy?
+                    // Aggregate is the boundary of transaction.
+                    // Usually aggregate uses optimistic offline lock of whole aggregate
+                    // for concurrency control.
+                    // So, we don't have to sync aggregate here, but we have to set at least PK and default values.
                     return when(dirty.store._localStore.add(dirty.obj), function(obj) {
                         dirty.obj = obj;
                         return when(obj);
@@ -527,15 +532,15 @@ function namespace(root) {
         /*
          * Returns composition of related objects.
          */
-        compose: function(obj, state) {
-            return new Compose(this, obj, state).compute();
+        compose: function(obj, allowedRelations, state) {
+            return new Compose(this, obj, allowedRelations, state).compute();
         },
         /*
          * Load related stores from composition of object.
          */
-        decompose: function(record) {
+        decompose: function(record, onConflict, associatedObj) {
             var obj = this.restoreObject(record);
-            return new Decompose(this, obj).compute();
+            return new Decompose(this, obj, onConflict, associatedObj).compute();
         },
         _prepareQuery: function(queryEngine, query) {
             var self = this;
@@ -1483,9 +1488,10 @@ function namespace(root) {
     ObjectAlreadyAdded.prototype.constructor = ObjectAlreadyAdded;
 
 
-    function Compose(store, obj, state) {
+    function Compose(store, obj, allowedRelations, state) {
         this._store = store;
         this._obj = obj;
+        this._allowedRelations = allowedRelations || [];
         this._state = state || new State();
 
     }
@@ -1501,10 +1507,34 @@ function namespace(root) {
                 });
             });
         },
+        _isRelationAllowed: function(relationName) {
+            if (!this._allowedRelations.length) {
+                return true;
+            }
+            for (var i = 0; i < this._allowedRelations.length; i++) {
+                if (relationName === this._allowedRelations.split('.')[0]) {
+                    return true;
+                }
+            }
+            return false;
+        },
+        _delegateAllowedRelations: function(relationName) {
+            var result = [];
+            for (var i = 0; i < this._allowedRelations.length; i++) {
+                var allowedRelationNameParts = this._allowedRelations.split('.');
+                if (relationName === allowedRelationNameParts[0] && allowedRelationNameParts.length > 1) {
+                    result.push(allowedRelationNameParts.slice(1).join('.'));
+                }
+            }
+            return result;
+        },
         _handleOneToMany: function() {
             var self = this;
             return whenIter(keys(this._store.relations.oneToMany), function(relationName) {
                 if (self._store.relationIsUsedByM2m(relationName)) {
+                    return;
+                }
+                if (!self._isRelationAllowed(relationName)) {
                     return;
                 }
                 var relation = self._store.relations.oneToMany[relationName];
@@ -1513,18 +1543,21 @@ function namespace(root) {
                 return when(relatedQueryResult, function(relatedQueryResult) {
                     self._store.getObjectAccessor().setValue(self._obj, relationName, relatedQueryResult);
                     return whenIter(relatedQueryResult, function(relatedObj) {
-                        return self._handleRelatedObj(relatedStore, relatedObj);
+                        return self._handleRelatedObj(relatedStore, relatedObj, self._delegateAllowedRelations(relationName));
                     });
                 });
             });
         },
-        _handleRelatedObj: function(relatedStore, relatedObj) {
-            return relatedStore.compose(relatedObj, this._state);
+        _handleRelatedObj: function(relatedStore, relatedObj, allowedRelations) {
+            return relatedStore.compose(relatedObj, allowedRelations, this._state);
 
         },
         _handleManyToMany: function() {
             var self = this;
             return whenIter(keys(this._store.relations.manyToMany), function(relationName) {
+                if (!self._isRelationAllowed(relationName)) {
+                    return;
+                }
                 var m2mRelation = self._store.relations.manyToMany[relationName];
                 var relatedStore = m2mRelation.getRelatedStore();
                 var relatedQueryResult = relatedStore.find(m2mRelation.getRelatedQuery(self._obj));
@@ -1532,7 +1565,7 @@ function namespace(root) {
                 return when(relatedQueryResult, function(relatedQueryResult) {
                     self._store.getObjectAccessor().setValue(self._obj, relationName, relatedQueryResult);
                     return whenIter(relatedQueryResult, function(relatedObj) {
-                        return self._handleRelatedObj(relatedStore, relatedObj);
+                        return self._handleRelatedObj(relatedStore, relatedObj, self._delegateAllowedRelations(relationName));
                     });
                 });
             });
@@ -1540,9 +1573,11 @@ function namespace(root) {
     };
 
 
-    function Decompose(store, obj) {
+    function Decompose(store, obj, onConflict, associatedObj) {
         this._store = store;
         this._obj = obj;
+        this._associatedObj = associatedObj;
+        this._onConflict = onConflict || this._defaultOnConflict;
     }
     Decompose.prototype = {
         constructor: Decompose,
@@ -1550,15 +1585,21 @@ function namespace(root) {
             var self = this,
                 localStore = this._store.getLocalStore();
             return when(self._handleForeignKey(), function() {
-                return when(resolveRejection(rejectException(localStore.add, localStore, self._obj), function(reason) {
-                    if (reason instanceof ObjectAlreadyAdded) {
-                        // Make object to be single instance;
-                        // TODO: Merge new object's state into old object's instance?
-                        return localStore.get(localStore.getObjectAccessor().getPk(self._obj));
-                    } else {
-                        return Promise.reject(reason);
-                    }
-                }), function(obj) {
+                if (self._associatedObj) {
+                    self._associatedObj = self._onConflict(self._store, self._obj, self._associatedObj);
+                } else {
+                    self._associatedObj = when(resolveRejection(rejectException(localStore.add, localStore, self._obj), function(reason) {
+                        if (reason instanceof ObjectAlreadyAdded) {
+                            // Make object to be single instance;
+                            return self._onConflict(self._store, self._obj, localStore.get(
+                                localStore.getObjectAccessor().getPk(self._obj)
+                            ));
+                        } else {
+                            return Promise.reject(reason);
+                        }
+                    }));
+                }
+                return when(self._associatedObj, function(obj) {
                     self._obj = obj;
                     return when(self._handleOneToMany(), function() {
                         return when(self._handleManyToMany(), function() {
@@ -1567,6 +1608,12 @@ function namespace(root) {
                     });
                 });
             });
+        },
+        _defaultOnConflict: function(store, newObj, oldObj) {
+            clone(oldObj, newObj, function(obj, attr, value) {
+                return store.getObjectAccessor().setValue(obj, attr, value);
+            });
+            return store.getLocalStore().update(newObj);
         },
         _handleForeignKey: function() {
             var self = this;
@@ -1590,11 +1637,16 @@ function namespace(root) {
                 }
                 var relation = self._store.relations.oneToMany[relationName];
                 var relatedStore = relation.getRelatedStore();
-                var relatedObjectList = self._store.getObjectAccessor().getValue(self._obj, relationName) || [];
-                return whenIter(relatedObjectList, function(relatedObj, i) {
+                var newRelatedObjectList = self._store.getObjectAccessor().getValue(self._obj, relationName) || [];
+                // When we add an aggregate to a single endpoint,
+                // the all child of the aggregate in the memory don't have PK,
+                // thus, we have to associate child manually based on their order.
+                var oldRelatedQueryResult = relatedStore.find(relation.getRelatedQuery(self._obj));
+                // TODO: Set here the reactive result to the object?
+                return whenIter(newRelatedObjectList, function(relatedObj, i) {
                     self._setForeignKeyToRelatedObj(self._obj, relation, relatedObj);
-                    return when(self._handleRelatedObj(relatedStore, relatedObj), function(relatedObj) {
-                        relatedObjectList[i] = relatedObj;
+                    return when(self._handleRelatedObj(relatedStore, relatedObj, oldRelatedQueryResult[i]), function(relatedObj) {
+                        newRelatedObjectList[i] = relatedObj;
                     });
                 });
             });
@@ -1606,12 +1658,12 @@ function namespace(root) {
                 if (typeof relatedObj[relatedField[i]] === "undefined") {
                     relatedObj[relatedField[i]] = value[i];
                 } else if (relatedObj[relatedField[i]] !== value[i]) {
-                    throw Error("Uncorrect value of Foreigh Key!");
+                    throw Error("Incorrect value of Foreigh Key!");
                 }
             }
         },
-        _handleRelatedObj: function(relatedStore, relatedObj) {
-            return relatedStore.decompose(relatedObj);
+        _handleRelatedObj: function(relatedStore, relatedObj, associatedRelatedObj) {
+            return relatedStore.decompose(relatedObj, this._onConflict, associatedRelatedObj);
         },
         _handleManyToMany: function() {
             var self = this;
@@ -2159,7 +2211,7 @@ function namespace(root) {
             this._delInitObjectState(obj);
             return Promise.resolve(obj);
         },
-        decompose: function(record) {
+        decompose: function(record, onConflict, associatedObj) {
             var obj = this.restoreObject(record);
             return this.add(obj);
         },
@@ -2364,11 +2416,6 @@ function namespace(root) {
                     }
                 }));
             }).then(function(response) {
-                // TODO: the obj can be an aggregate? Use decompose with merging?
-                // Aggregate is the boundary of transaction.
-                // Usually aggregate uses optimistic offline lock of whole aggregate
-                // for concurrency control.
-                // So, we don't have to sync aggregate here, but we have to set at least PK and default values.
                 self._mapper.update(response, obj);
                 self._setInitObjectState(obj);
                 return obj;
@@ -2578,7 +2625,7 @@ function namespace(root) {
     function Registry(parent) {
         observe(this, 'observed');
         this._stores = {};
-        this._local_stores = {};
+        this._localStores = {};
         this._parents = [];
         this._children = [];
         this.transaction = new TransactionManager(this);
@@ -2591,7 +2638,7 @@ function namespace(root) {
     Registry.prototype = {
         constructor: Registry,
         register: function(name, store) {
-            this._local_stores[name] = store;
+            this._localStores[name] = store;
             this._updateCache();
             store.register(name, this);
             this.observed().notify('register', store);
@@ -2599,9 +2646,9 @@ function namespace(root) {
         _updateCache: function() {
             for (var i = 0; i < this._parents.length; i++) {
                 var parent = this._parents[i];
-                clone(parent._local_stores, this._stores);
+                clone(parent._localStores, this._stores);
             }
-            clone(this._local_stores, this._stores);
+            clone(this._localStores, this._stores);
             for (var i = 0; i < this._children.length; i++) {
                 var child = this._children[i];
                 child._updateCache();
