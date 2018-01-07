@@ -69,7 +69,7 @@ function namespace(root) {
         compose: function(obj, allowedRelations, state) {
             throw Error("Not Implemented Error");
         },
-        decompose: function(record, onConflictStrategy, associatedObj) {
+        decompose: function(record, onConflict, associatedObj) {
             throw Error("Not Implemented Error");
         },
         clean: function() {
@@ -174,7 +174,7 @@ function namespace(root) {
         addIndex: function(index) {
             return this._localStore.addIndex(index);
         },
-        decompose: function(record, onConflictStrategy, associatedObj) {
+        decompose: function(record, onConflict, associatedObj) {
             var obj = this.restoreObject(record);
             return this._localStore.add(obj);
         },
@@ -538,9 +538,9 @@ function namespace(root) {
         /*
          * Load related stores from composition of object.
          */
-        decompose: function(record, onConflictStrategy, associatedObj) {
+        decompose: function(record, onConflict, associatedObj) {
             var obj = this.restoreObject(record);
-            return new Decompose(this, obj, onConflictStrategy, associatedObj).compute();
+            return new Decompose(this, obj, onConflict, associatedObj).compute();
         },
         _prepareQuery: function(queryEngine, query) {
             var self = this;
@@ -1573,11 +1573,11 @@ function namespace(root) {
     };
 
 
-    function Decompose(store, obj, onConflictStrategy, associatedObj) {
+    function Decompose(store, obj, onConflict, associatedObj) {
         this._store = store;
         this._obj = obj;
         this._associatedObj = associatedObj;
-        this._onConflictStrategy = onConflictStrategy || this._defailtOnConflictStrategy;
+        this._onConflict = onConflict || this._defaultOnConflict;
     }
     Decompose.prototype = {
         constructor: Decompose,
@@ -1586,12 +1586,14 @@ function namespace(root) {
                 localStore = this._store.getLocalStore();
             return when(self._handleForeignKey(), function() {
                 if (self._associatedObj) {
-                    self._associatedObj = self._onConflictStrategy(self._store, self._obj, self._associatedObj);
+                    self._associatedObj = self._onConflict(self._store, self._obj, self._associatedObj);
                 } else {
                     self._associatedObj = when(resolveRejection(rejectException(localStore.add, localStore, self._obj), function(reason) {
                         if (reason instanceof ObjectAlreadyAdded) {
                             // Make object to be single instance;
-                            return self._onConflictStrategy(self._store, self._obj, localStore.get(localStore.getObjectAccessor().getPk(self._obj)));
+                            return self._onConflict(self._store, self._obj, localStore.get(
+                                localStore.getObjectAccessor().getPk(self._obj)
+                            ));
                         } else {
                             return Promise.reject(reason);
                         }
@@ -1607,8 +1609,7 @@ function namespace(root) {
                 });
             });
         },
-        _defailtOnConflictStrategy: function(store, newObj, oldObj) {
-            // return oldObj;
+        _defaultOnConflict: function(store, newObj, oldObj) {
             clone(oldObj, newObj, function(obj, attr, value) {
                 return store.getObjectAccessor().setValue(obj, attr, value);
             });
@@ -1662,7 +1663,7 @@ function namespace(root) {
             }
         },
         _handleRelatedObj: function(relatedStore, relatedObj, associatedRelatedObj) {
-            return relatedStore.decompose(relatedObj, this._onConflictStrategy, associatedRelatedObj);
+            return relatedStore.decompose(relatedObj, this._onConflict, associatedRelatedObj);
         },
         _handleManyToMany: function() {
             var self = this;
@@ -2210,7 +2211,7 @@ function namespace(root) {
             this._delInitObjectState(obj);
             return Promise.resolve(obj);
         },
-        decompose: function(record, onConflictStrategy, associatedObj) {
+        decompose: function(record, onConflict, associatedObj) {
             var obj = this.restoreObject(record);
             return this.add(obj);
         },
