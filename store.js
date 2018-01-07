@@ -66,7 +66,7 @@ function namespace(root) {
         delete: function(obj, state) {
             throw Error("Not Implemented Error");
         },
-        compose: function(obj, state) {
+        compose: function(obj, allowedRelations, state) {
             throw Error("Not Implemented Error");
         },
         decompose: function(record) {
@@ -108,7 +108,7 @@ function namespace(root) {
         },
         addIndex: function(index) {
         },
-        compose: function(obj, state) {
+        compose: function(obj, allowedRelations, state) {
             return obj;
         },
         destroy: function() {
@@ -226,7 +226,7 @@ function namespace(root) {
                     dirty.obj = obj;
                     return when(obj);
                 });
-            }, function() {  // onAutocommit
+            }, function() {  // onAutoCommit
                 var dirty = this;
                 return when(dirty.store.getRemoteStore().add(dirty.obj), function(obj) {
                     return when(dirty.store._localStore.add(dirty.obj), function(obj) {
@@ -527,8 +527,8 @@ function namespace(root) {
         /*
          * Returns composition of related objects.
          */
-        compose: function(obj, state) {
-            return new Compose(this, obj, state).compute();
+        compose: function(obj, allowedRelations, state) {
+            return new Compose(this, obj, allowedRelations, state).compute();
         },
         /*
          * Load related stores from composition of object.
@@ -1483,9 +1483,10 @@ function namespace(root) {
     ObjectAlreadyAdded.prototype.constructor = ObjectAlreadyAdded;
 
 
-    function Compose(store, obj, state) {
+    function Compose(store, obj, allowedRelations, state) {
         this._store = store;
         this._obj = obj;
+        this._allowedRelations = allowedRelations || [];
         this._state = state || new State();
 
     }
@@ -1501,10 +1502,34 @@ function namespace(root) {
                 });
             });
         },
+        _isRelationAllowed: function(relationName) {
+            if (!this._allowedRelations.length) {
+                return true;
+            }
+            for (var i = 0; i < this._allowedRelations.length; i++) {
+                if (relationName === this._allowedRelations.split('.')[0]) {
+                    return true;
+                }
+            }
+            return false;
+        },
+        _delegateAllowedRelations: function(relationName) {
+            var result = [];
+            for (var i = 0; i < this._allowedRelations.length; i++) {
+                var allowedRelationNameParts = this._allowedRelations.split('.');
+                if (relationName === allowedRelationNameParts[0] && allowedRelationNameParts.length > 1) {
+                    result.push(allowedRelationNameParts.slice(1).join('.'));
+                }
+            }
+            return result;
+        },
         _handleOneToMany: function() {
             var self = this;
             return whenIter(keys(this._store.relations.oneToMany), function(relationName) {
                 if (self._store.relationIsUsedByM2m(relationName)) {
+                    return;
+                }
+                if (!self._isRelationAllowed(relationName)) {
                     return;
                 }
                 var relation = self._store.relations.oneToMany[relationName];
@@ -1513,18 +1538,21 @@ function namespace(root) {
                 return when(relatedQueryResult, function(relatedQueryResult) {
                     self._store.getObjectAccessor().setValue(self._obj, relationName, relatedQueryResult);
                     return whenIter(relatedQueryResult, function(relatedObj) {
-                        return self._handleRelatedObj(relatedStore, relatedObj);
+                        return self._handleRelatedObj(relatedStore, relatedObj, self._delegateAllowedRelations(relationName));
                     });
                 });
             });
         },
-        _handleRelatedObj: function(relatedStore, relatedObj) {
-            return relatedStore.compose(relatedObj, this._state);
+        _handleRelatedObj: function(relatedStore, relatedObj, allowedRelations) {
+            return relatedStore.compose(relatedObj, allowedRelations, this._state);
 
         },
         _handleManyToMany: function() {
             var self = this;
             return whenIter(keys(this._store.relations.manyToMany), function(relationName) {
+                if (!self._isRelationAllowed(relationName)) {
+                    return;
+                }
                 var m2mRelation = self._store.relations.manyToMany[relationName];
                 var relatedStore = m2mRelation.getRelatedStore();
                 var relatedQueryResult = relatedStore.find(m2mRelation.getRelatedQuery(self._obj));
@@ -1532,7 +1560,7 @@ function namespace(root) {
                 return when(relatedQueryResult, function(relatedQueryResult) {
                     self._store.getObjectAccessor().setValue(self._obj, relationName, relatedQueryResult);
                     return whenIter(relatedQueryResult, function(relatedObj) {
-                        return self._handleRelatedObj(relatedStore, relatedObj);
+                        return self._handleRelatedObj(relatedStore, relatedObj, self._delegateAllowedRelations(relationName));
                     });
                 });
             });
@@ -2578,7 +2606,7 @@ function namespace(root) {
     function Registry(parent) {
         observe(this, 'observed');
         this._stores = {};
-        this._local_stores = {};
+        this._localStores = {};
         this._parents = [];
         this._children = [];
         this.transaction = new TransactionManager(this);
@@ -2591,7 +2619,7 @@ function namespace(root) {
     Registry.prototype = {
         constructor: Registry,
         register: function(name, store) {
-            this._local_stores[name] = store;
+            this._localStores[name] = store;
             this._updateCache();
             store.register(name, this);
             this.observed().notify('register', store);
@@ -2599,9 +2627,9 @@ function namespace(root) {
         _updateCache: function() {
             for (var i = 0; i < this._parents.length; i++) {
                 var parent = this._parents[i];
-                clone(parent._local_stores, this._stores);
+                clone(parent._localStores, this._stores);
             }
-            clone(this._local_stores, this._stores);
+            clone(this._localStores, this._stores);
             for (var i = 0; i < this._children.length; i++) {
                 var child = this._children[i];
                 child._updateCache();
