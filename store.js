@@ -212,7 +212,7 @@ function namespace(root) {
                 var old = this.store.getObjectAccessor().getObjectState(dirty.obj);
                 dirty.store.getObjectAccessor().delTmpPk(dirty.obj);
                 return this.store.getRemoteStore().add(dirty.obj).then(function(obj) {
-                    return when(dirty.store._localStore.update(obj), function(obj) {  // use decompose()
+                    return when(dirty.store._localStore.update(obj), function(obj) {  // use decompose(obj, obj)
                         return when(dirty.store.syncDependencies(obj, old), function() {
                             return obj;
                         });
@@ -223,7 +223,7 @@ function namespace(root) {
             }, function() {  // onPending
                 var dirty = this;
                 this.store.getObjectAccessor().setTmpPk(dirty.obj);
-                return when(dirty.store._localStore.add(dirty.obj), function(obj) {
+                return when(dirty.store._localStore.add(dirty.obj), function(obj) {  // use decompose(dirty.obj)
                     dirty.obj = obj;
                     return when(obj);
                 });
@@ -235,7 +235,7 @@ function namespace(root) {
                     // Usually aggregate uses optimistic offline lock of whole aggregate
                     // for concurrency control.
                     // So, we don't have to sync aggregate here, but we have to set at least PK and default values.
-                    return when(dirty.store._localStore.add(dirty.obj), function(obj) {  // use decompose()
+                    return when(dirty.store._localStore.add(dirty.obj), function(obj) {  // use decompose(dirty.obj)
                         dirty.obj = obj;
                         return when(obj);
                     });
@@ -248,7 +248,7 @@ function namespace(root) {
             return this._getTransaction().update(this, obj, old, function() {
                 var dirty = this;
                 return this.store.getRemoteStore().update(dirty.obj).then(function(obj) {
-                    return dirty.store._localStore.update(obj);  // use decompose()
+                    return dirty.store._localStore.update(obj);  // use decompose(obj, obj)
                 });
             }, function() {
                 var dirty = this;
@@ -1149,12 +1149,12 @@ function namespace(root) {
             var pkValue = this.getPk(obj);
             if (pkValue instanceof Array) {
                 for (var i = 0; i < pkValue.length; i++) {
-                    if (typeof pkValue[i] === "undefined") {
+                    if (pkValue[i] === null || typeof pkValue[i] === "undefined") {
                         pkValue[i] = this._makeTmpId();
                     }
                 }
             } else {
-                if (typeof pkValue === "undefined") {
+                if (pkValue === null || typeof pkValue === "undefined") {
                     pkValue = this._makeTmpId();
                 }
             }
@@ -2224,6 +2224,7 @@ function namespace(root) {
         },
         onConflict: function(newObj, oldObj) {
             var self = this;
+            // TODO: Fix memory leak in AbstractLeafStore._objectStateMapping for unused object
             clone(newObj, oldObj, function(obj, attr, value) {
                 return self.getObjectAccessor().setValue(obj, attr, value);
             });
