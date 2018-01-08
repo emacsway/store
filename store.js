@@ -69,7 +69,7 @@ function namespace(root) {
         compose: function(obj, allowedRelations, state) {
             throw Error("Not Implemented Error");
         },
-        decompose: function(record, onConflict, associatedObj) {
+        decompose: function(record, associatedObj) {
             throw Error("Not Implemented Error");
         },
         clean: function() {
@@ -158,13 +158,13 @@ function namespace(root) {
             return [this];
         },
         setNextPk: function(obj) {
-            return this._remoteStore.setNextPk(obj);
+            return this._localStore.setNextPk(obj);
         },
         getInitObjectState: function(obj) {
             return this._localStore.getInitObjectState(obj);
         },
         restoreObject: function(record) {
-            return this._remoteStore.restoreObject(record);
+            return this._localStore.restoreObject(record);
         },
         getQueryEngine: function() {
             return this._localStore.getQueryEngine();
@@ -174,16 +174,11 @@ function namespace(root) {
         addIndex: function(index) {
             return this._localStore.addIndex(index);
         },
-        decompose: function(record, onConflict, associatedObj) {
-            var obj = this.restoreObject(record);
-            return this._localStore.add(obj);
+        decompose: function(record, associatedObj) {
+            return this._localStore.decompose(record, associatedObj);
         },
-        fill: function(options, callback) {  // TODO: Deprecated. Remove me.
-            root.console && root.console.warn("Store.prototype.fill() is deprecated! Use Store.prototype.pull() instead!");
-            options = options || {};
-            var query = options.query;
-            if (query) { delete options.query; }
-            return this.pull(query, options, callback);
+        onConflict: function(newObj, oldObj) {
+            return this._localStore.onConflict(newObj, oldObj);
         },
         pull: function(query, options) {  // fill, populate, pull (from remoteStore), fetch...
             typeof options === "undefined" && (options = {});
@@ -192,7 +187,7 @@ function namespace(root) {
             return when(this._prepareQuery(this._remoteStore.getQueryEngine(), query), function(query) {
                 return when(this._remoteStore.find(query, options), function(objectList) {
                     return whenIter(objectList, function(obj, i) {
-                        return when(options.decompose ? self.decompose(obj) : self._localStore.add(obj), function(obj) {
+                        return when(self.decompose(obj), function(obj) {
                             objectList[i] = obj;
                         });
                     });
@@ -211,7 +206,7 @@ function namespace(root) {
                 var old = this.store.getObjectAccessor().getObjectState(dirty.obj);
                 dirty.store.getObjectAccessor().delTmpPk(dirty.obj);
                 return this.store.getRemoteStore().add(dirty.obj).then(function(obj) {
-                    return when(dirty.store._localStore.update(obj), function(obj) {
+                    return when(dirty.store._localStore.update(obj), function(obj) {  // use decompose()
                         return when(dirty.store.syncDependencies(obj, old), function() {
                             return obj;
                         });
@@ -234,7 +229,7 @@ function namespace(root) {
                     // Usually aggregate uses optimistic offline lock of whole aggregate
                     // for concurrency control.
                     // So, we don't have to sync aggregate here, but we have to set at least PK and default values.
-                    return when(dirty.store._localStore.add(dirty.obj), function(obj) {
+                    return when(dirty.store._localStore.add(dirty.obj), function(obj) {  // use decompose()
                         dirty.obj = obj;
                         return when(obj);
                     });
@@ -247,7 +242,7 @@ function namespace(root) {
             return this._getTransaction().update(this, obj, old, function() {
                 var dirty = this;
                 return this.store.getRemoteStore().update(dirty.obj).then(function(obj) {
-                    return dirty.store._localStore.update(obj);
+                    return dirty.store._localStore.update(obj);  // use decompose()
                 });
             }, function() {
                 var dirty = this;
@@ -538,9 +533,8 @@ function namespace(root) {
         /*
          * Load related stores from composition of object.
          */
-        decompose: function(record, onConflict, associatedObj) {
-            var obj = this.restoreObject(record);
-            return new Decompose(this, obj, onConflict, associatedObj).compute();
+        decompose: function(record, associatedObj) {
+            return new Decompose(this, record, associatedObj).compute();
         },
         _prepareQuery: function(queryEngine, query) {
             var self = this;
@@ -1573,11 +1567,16 @@ function namespace(root) {
     };
 
 
-    function Decompose(store, obj, onConflict, associatedObj) {
+    function Decompose(store, record, associatedObj) {
         this._store = store;
-        this._obj = obj;
+        this._obj = store.restoreObject(record);
+        this._previousState = {};
         this._associatedObj = associatedObj;
-        this._onConflict = onConflict || this._defaultOnConflict;
+        if (!this._associatedObj && this._store.getObjectAccessor().pkExists(this._obj)) {
+            this._associatedObj = this._store.get(
+                this._store.getObjectAccessor().getPk(this._obj)
+            );
+        }
     }
     Decompose.prototype = {
         constructor: Decompose,
@@ -1585,35 +1584,23 @@ function namespace(root) {
             var self = this,
                 localStore = this._store.getLocalStore();
             return when(self._handleForeignKey(), function() {
-                if (self._associatedObj) {
-                    self._associatedObj = self._onConflict(self._store, self._obj, self._associatedObj);
-                } else {
-                    self._associatedObj = when(resolveRejection(rejectException(localStore.add, localStore, self._obj), function(reason) {
-                        if (reason instanceof ObjectAlreadyAdded) {
-                            // Make object to be single instance;
-                            return self._onConflict(self._store, self._obj, localStore.get(
-                                localStore.getObjectAccessor().getPk(self._obj)
-                            ));
-                        } else {
-                            return Promise.reject(reason);
-                        }
-                    }));
-                }
-                return when(self._associatedObj, function(obj) {
-                    self._obj = obj;
-                    return when(self._handleOneToMany(), function() {
-                        return when(self._handleManyToMany(), function() {
-                            return self._obj;
+                return when(self._associatedObj, function(associatedObj) {
+                    if (associatedObj) {
+                        self._previousState = self._store.getObjectAccessor().getObjectState(associatedObj);
+                        var obj = self._store.onConflict(self._obj, associatedObj);
+                    } else {
+                        var obj = rejectException(localStore.add, localStore, self._obj);
+                    }
+                    return when(obj, function(obj) {
+                        self._obj = obj;
+                        return when(self._handleOneToMany(), function() {
+                            return when(self._handleManyToMany(), function() {
+                                return self._obj;
+                            });
                         });
                     });
                 });
             });
-        },
-        _defaultOnConflict: function(store, newObj, oldObj) {
-            clone(oldObj, newObj, function(obj, attr, value) {
-                return store.getObjectAccessor().setValue(obj, attr, value);
-            });
-            return store.getLocalStore().update(newObj);
         },
         _handleForeignKey: function() {
             var self = this;
@@ -1641,11 +1628,14 @@ function namespace(root) {
                 // When we add an aggregate to a single endpoint,
                 // the all child of the aggregate in the memory don't have PK,
                 // thus, we have to associate child manually based on their order.
-                var oldRelatedQueryResult = relatedStore.find(relation.getRelatedQuery(self._obj));
+                var oldRelatedObjectList = self._previousState[relationName] || [];
+                if (!oldRelatedObjectList.length) {
+                    oldRelatedObjectList = relatedStore.findList(relation.getRelatedQuery(self._obj));
+                }
                 // TODO: Set here the reactive result to the object?
                 return whenIter(newRelatedObjectList, function(relatedObj, i) {
                     self._setForeignKeyToRelatedObj(self._obj, relation, relatedObj);
-                    return when(self._handleRelatedObj(relatedStore, relatedObj, oldRelatedQueryResult[i]), function(relatedObj) {
+                    return when(self._handleRelatedObj(relatedStore, relatedObj, oldRelatedObjectList[i]), function(relatedObj) {
                         newRelatedObjectList[i] = relatedObj;
                     });
                 });
@@ -1663,7 +1653,7 @@ function namespace(root) {
             }
         },
         _handleRelatedObj: function(relatedStore, relatedObj, associatedRelatedObj) {
-            return relatedStore.decompose(relatedObj, this._onConflict, associatedRelatedObj);
+            return relatedStore.decompose(relatedObj, associatedRelatedObj);
         },
         _handleManyToMany: function() {
             var self = this;
@@ -2211,9 +2201,27 @@ function namespace(root) {
             this._delInitObjectState(obj);
             return Promise.resolve(obj);
         },
-        decompose: function(record, onConflict, associatedObj) {
+        decompose: function(record, associatedObj) {
+            var self = this;
             var obj = this.restoreObject(record);
-            return this.add(obj);
+            if (!associatedObj && this.getObjectAccessor().pkExists(obj)) {
+                associatedObj = this.get(
+                    this.getObjectAccessor().getPk(obj)
+                );
+            }
+            return when(associatedObj, function(associatedObj) {
+                if (associatedObj) {
+                    return self.onConflict(obj, associatedObj);
+                }
+                return this.add(obj);
+            });
+        },
+        onConflict: function(newObj, oldObj) {
+            var self = this;
+            clone(newObj, oldObj, function(obj, attr, value) {
+                return self.getObjectAccessor().setValue(obj, attr, value);
+            });
+            return self.update(oldObj);
         },
         clean: function() {
             clean(this._objectStateMapping);
@@ -2869,6 +2877,9 @@ function namespace(root) {
             if (weight !== 0) {
                 return weight;
             }
+            // if (this.store.getRemoteStore() instanceof DummyStore) {
+            //     return weight;
+            // }
             return this._doCompare(other);
         },
         getWeight: function() {
