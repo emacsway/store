@@ -230,11 +230,6 @@ function namespace(root) {
             }, function() {  // onAutoCommit
                 var dirty = this;
                 return when(dirty.store.getRemoteStore().add(dirty.obj), function(obj) {
-                    // TODO: the obj can be an aggregate? Use decompose with merging strategy?
-                    // Aggregate is the boundary of transaction.
-                    // Usually aggregate uses optimistic offline lock of whole aggregate
-                    // for concurrency control.
-                    // So, we don't have to sync aggregate here, but we have to set at least PK and default values.
                     return when(dirty.store._localStore.add(dirty.obj), function(obj) {  // use decompose(dirty.obj)
                         dirty.obj = obj;
                         return when(obj);
@@ -540,7 +535,8 @@ function namespace(root) {
          * Load related stores from composition of object.
          */
         decompose: function(record, associatedObj) {
-            return new Decompose(this, record, associatedObj).compute();
+            var obj = this.restoreObject(record);
+            return new Decompose(this, obj, associatedObj).compute();
         },
         _prepareQuery: function(queryEngine, query) {
             var self = this;
@@ -1577,9 +1573,9 @@ function namespace(root) {
     };
 
 
-    function Decompose(store, record, associatedObj) {
+    function Decompose(store, obj, associatedObj) {
         this._store = store;
-        this._obj = store.restoreObject(record);
+        this._obj = obj;
         this._previousState = {};
         this._associatedObj = associatedObj;
         if (!this._associatedObj && this._store.getObjectAccessor().pkExists(this._obj)) {
@@ -1638,6 +1634,13 @@ function namespace(root) {
                 // When we add an aggregate to a single endpoint,
                 // the all child of the aggregate in the memory don't have PK,
                 // thus, we have to associate child manually based on their order.
+                //
+                // Aggregate is the boundary of transaction.
+                // Usually aggregate uses optimistic offline lock for whole aggregate (the root of aggregate)
+                // for concurrency control.
+                // So, we don't have to sync aggregate here, but we have to set at least PK and default values.
+                // We assume that concurrent transaction can't to delete any item of aggregate because of
+                // optimistic offline lock for whole aggregate (the root of aggregate).
                 var oldRelatedObjectList = self._previousState[relationName] || [];
                 if (!oldRelatedObjectList.length) {
                     oldRelatedObjectList = relatedStore.findList(relation.getRelatedQuery(self._obj));
@@ -2113,7 +2116,6 @@ function namespace(root) {
         },
         restoreObject: function(record) {
             var obj = this._mapper.isLoaded(record) ? record : this._mapper.load(record);
-            this._setInitObjectState(obj);
             return obj;
         },
         getInitObjectState: function(obj) {
@@ -2392,7 +2394,9 @@ function namespace(root) {
                     }
                 }));
             }).then(function(obj) {
-                return self.restoreObject(obj);
+                obj = self.restoreObject(obj);
+                this._setInitObjectState(obj);
+                return obj;
             });
 
         },
@@ -2414,6 +2418,7 @@ function namespace(root) {
             }).then(function(objectList) {
                 for (var i = 0; i < objectList.length; i++) {
                     objectList[i] = self.restoreObject(objectList[i]);
+                    this._setInitObjectState(objectList[i]);
                 }
                 return objectList;
             });
