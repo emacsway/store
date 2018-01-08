@@ -210,7 +210,7 @@ function namespace(root) {
             return this._getTransaction().add(this, obj, function() {  // onCommit
                 var dirty = this;
                 var old = this.store.getObjectAccessor().getObjectState(dirty.obj);
-                dirty.store.getObjectAccessor().delTmpPk(dirty.obj);
+                dirty.store.getObjectAccessor().delTmpPkValues(dirty.obj);
                 return this.store.getRemoteStore().add(dirty.obj).then(function(obj) {
                     return when(dirty.store._localStore.update(obj), function(obj) {  // use decompose(obj, obj)
                         return when(dirty.store.syncDependencies(obj, old), function() {
@@ -222,7 +222,7 @@ function namespace(root) {
                 return when(this.store._localStore.delete(this.obj));
             }, function() {  // onPending
                 var dirty = this;
-                this.store.getObjectAccessor().setTmpPk(dirty.obj);
+                this.store.getObjectAccessor().populateTmpPkValues(dirty.obj);
                 return when(dirty.store._localStore.add(dirty.obj), function(obj) {  // use decompose(dirty.obj)
                     dirty.obj = obj;
                     return when(obj);
@@ -1149,7 +1149,7 @@ function namespace(root) {
         _pkValueIsDefined: function(value) {
             return value !== null && typeof value !== "undefined";
         },
-        setTmpPk: function(obj) {
+        populateTmpPkValues: function(obj) {
             var pkValue = this.getPk(obj);
             if (pkValue instanceof Array) {
                 for (var i = 0; i < pkValue.length; i++) {
@@ -1164,7 +1164,7 @@ function namespace(root) {
             }
             this.setPk(obj, pkValue);
         },
-        delTmpPk: function(obj) {
+        delTmpPkValues: function(obj) {
             var pk = toArray(this.pk);
             for (var i = 0; i < pk.length; i++) {
                 var field = pk[i];
