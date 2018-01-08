@@ -1576,9 +1576,14 @@ function namespace(root) {
     function Decompose(store, obj, onConflict, associatedObj) {
         this._store = store;
         this._obj = obj;
-        this._associatedObj = associatedObj;
         this._previousState = {};
         this._onConflict = onConflict || this._defaultOnConflict;
+        this._associatedObj = associatedObj;
+        if (!this._associatedObj && this._store.getObjectAccessor().pkExists(this._obj)) {
+            this._associatedObj = this._store.get(
+                this._store.getObjectAccessor().getPk(this._obj)
+            );
+        }
     }
     Decompose.prototype = {
         constructor: Decompose,
@@ -1586,39 +1591,29 @@ function namespace(root) {
             var self = this,
                 localStore = this._store.getLocalStore();
             return when(self._handleForeignKey(), function() {
-                if (self._associatedObj) {
-                    self._previousState = self._store.getObjectAccessor().getObjectState(self._associatedObj);
-                    self._associatedObj = self._onConflict(self._store, self._obj, self._associatedObj);
-                } else {
-                    self._associatedObj = when(resolveRejection(rejectException(localStore.add, localStore, self._obj), function(reason) {
-                        if (reason instanceof ObjectAlreadyAdded) {
-                            // Make object to be single instance;
-                            return when(localStore.get(
-                                localStore.getObjectAccessor().getPk(self._obj)
-                            ), function(associatedObj) {
-                                self._previousState = self._store.getObjectAccessor().getObjectState(associatedObj);
-                                return self._onConflict(self._store, self._obj, associatedObj);
+                return when(self._associatedObj, function(associatedObj) {
+                    if (associatedObj) {
+                        self._previousState = self._store.getObjectAccessor().getObjectState(associatedObj);
+                        var obj = self._onConflict(self._store, self._obj, associatedObj);
+                    } else {
+                        var obj = rejectException(localStore.add, localStore, self._obj);
+                    }
+                    return when(obj, function(obj) {
+                        self._obj = obj;
+                        return when(self._handleOneToMany(), function() {
+                            return when(self._handleManyToMany(), function() {
+                                return self._obj;
                             });
-                        } else {
-                            return Promise.reject(reason);
-                        }
-                    }));
-                }
-                return when(self._associatedObj, function(obj) {
-                    self._obj = obj;
-                    return when(self._handleOneToMany(), function() {
-                        return when(self._handleManyToMany(), function() {
-                            return self._obj;
                         });
                     });
                 });
             });
         },
         _defaultOnConflict: function(store, newObj, oldObj) {
-            clone(oldObj, newObj, function(obj, attr, value) {
+            clone(newObj, oldObj, function(obj, attr, value) {
                 return store.getObjectAccessor().setValue(obj, attr, value);
             });
-            return store.getLocalStore().update(newObj);
+            return store.getLocalStore().update(oldObj);
         },
         _handleForeignKey: function() {
             var self = this;
