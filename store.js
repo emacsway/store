@@ -206,7 +206,7 @@ function namespace(root) {
                 var old = this.store.getObjectAccessor().getObjectState(dirty.obj);
                 dirty.store.getObjectAccessor().delTmpPk(dirty.obj);
                 return this.store.getRemoteStore().add(dirty.obj).then(function(obj) {
-                    return when(dirty.store._localStore.update(obj), function(obj) {
+                    return when(dirty.store._localStore.update(obj), function(obj) {  // use decompose()
                         return when(dirty.store.syncDependencies(obj, old), function() {
                             return obj;
                         });
@@ -229,7 +229,7 @@ function namespace(root) {
                     // Usually aggregate uses optimistic offline lock of whole aggregate
                     // for concurrency control.
                     // So, we don't have to sync aggregate here, but we have to set at least PK and default values.
-                    return when(dirty.store._localStore.add(dirty.obj), function(obj) {
+                    return when(dirty.store._localStore.add(dirty.obj), function(obj) {  // use decompose()
                         dirty.obj = obj;
                         return when(obj);
                     });
@@ -242,7 +242,7 @@ function namespace(root) {
             return this._getTransaction().update(this, obj, old, function() {
                 var dirty = this;
                 return this.store.getRemoteStore().update(dirty.obj).then(function(obj) {
-                    return dirty.store._localStore.update(obj);
+                    return dirty.store._localStore.update(obj);  // use decompose()
                 });
             }, function() {
                 var dirty = this;
@@ -2877,6 +2877,9 @@ function namespace(root) {
             if (weight !== 0) {
                 return weight;
             }
+            // if (this.store.getRemoteStore() instanceof DummyStore) {
+            //     return weight;
+            // }
             return this._doCompare(other);
         },
         getWeight: function() {
