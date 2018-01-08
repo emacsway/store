@@ -74,6 +74,9 @@ function namespace(root) {
         },
         clean: function() {
             throw Error("Not Implemented Error");
+        },
+        isNull: function() {
+            throw Error("Not Implemented Error");
         }
     };
 
@@ -112,6 +115,9 @@ function namespace(root) {
             return obj;
         },
         destroy: function() {
+        },
+        isNull: function() {
+            return false;
         }
     }, Object.create(IStore.prototype));
 
@@ -1763,9 +1769,9 @@ function namespace(root) {
                 this._disposable.dispose();
                 this._disposable = new CompositeDisposable();
 
-            } else if (!this.observed().isObservable()) {
+            } else if (this.observed().isNull()) {
                 for (var i = 0; i < this._relatedSubjects.length; i++) {
-                    if (!this._relatedSubjects[i].observed().isObservable()) {
+                    if (this._relatedSubjects[i].observed().isNull()) {
                         this._relatedSubjects[i].observe(enable);
                     }
                 };
@@ -1860,7 +1866,7 @@ function namespace(root) {
         },
         addRelatedSubject: function(relatedSubject) {
             this._relatedSubjects.push(relatedSubject);
-            if (this.observed().isObservable()) {
+            if (!this.observed().isNull()) {
                 this._disposable = this._disposable.add(
                     relatedSubject.observed().attach(['add', 'update', 'delete'], this._getBroadObserver())
                 );
@@ -1980,7 +1986,7 @@ function namespace(root) {
 
     function SubResult(subject, reproducer, filter, objectList, relatedSubjects) {
         Result.apply(this, arguments);
-        if (subject.observed().isObservable()) {
+        if (!subject.observed().isNull()) {
             this.observe();
         }
     }
@@ -2486,7 +2492,10 @@ function namespace(root) {
         AbstractLeafStore.call(this, options);
     }
     DummyStore.prototype = clone({
-        constructor: DummyStore
+        constructor: DummyStore,
+        isNull: function() {
+            return true;
+        }
     }, Object.create(AbstractLeafStore.prototype));
 
 
@@ -2725,7 +2734,7 @@ function namespace(root) {
 
 
     function TransactionManager(registry) {
-        this._transaction = new NoneTransaction(registry);
+        this._transaction = new DummyTransaction(registry);
     }
     TransactionManager.prototype = {
         constructor: TransactionManager,
@@ -2778,6 +2787,9 @@ function namespace(root) {
         },
         delete: function(store, obj, onCommit, onRollback, onPending, onAutocommit) {
             throw Error("Not Implemented Error!");
+        },
+        isNull: function() {
+            throw Error("Not Implemented Error");
         }
     };
 
@@ -2852,6 +2864,9 @@ function namespace(root) {
                 }
             }
             return -1;
+        },
+        isNull: function() {
+            return false;
         }
     }, Object.create(AbstractTransaction.prototype));
 
@@ -2963,11 +2978,11 @@ function namespace(root) {
     }, Object.create(AbstractDirty.prototype));
 
 
-    function NoneTransaction(registry) {
+    function DummyTransaction(registry) {
         AbstractTransaction.call(this, registry);
     }
-    NoneTransaction.prototype = clone({
-        constructor: NoneTransaction,
+    DummyTransaction.prototype = clone({
+        constructor: DummyTransaction,
         begin: function() {
             return new TwoPhaseTransaction(this._registry, this);
         },
@@ -2985,6 +3000,9 @@ function namespace(root) {
         },
         delete: function(store, obj, onCommit, onRollback, onPending, onAutocommit) {
             return new DeleteDirty(store, obj, onCommit, onRollback, onPending, onAutocommit).autocommit();
+        },
+        isNull: function() {
+            return true;
         }
     }, Object.create(AbstractTransaction.prototype));
 
@@ -3020,7 +3038,7 @@ function namespace(root) {
         notify: function(aspect/*, ...*/) {
             throw Error("Not Implemented Error!");
         },
-        isObservable: function() {
+        isNull: function() {
             throw Error("Not Implemented Error!");
         }
     };
@@ -3099,8 +3117,8 @@ function namespace(root) {
             }
             return this;
         },
-        isObservable: function() {
-            return true;
+        isNull: function() {
+            return false;
         }
     }, Object.create(IObservable.prototype));
 
@@ -3184,8 +3202,8 @@ function namespace(root) {
         notify: function(aspect/*, ...*/) {
             return this;
         },
-        isObservable: function() {
-            return false;
+        isNull: function() {
+            return true;
         }
     }, Object.create(IObservable.prototype));
 
