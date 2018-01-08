@@ -180,13 +180,6 @@ function namespace(root) {
         onConflict: function(newObj, oldObj) {
             return this._localStore.onConflict(newObj, oldObj);
         },
-        fill: function(options, callback) {  // TODO: Deprecated. Remove me.
-            root.console && root.console.warn("Store.prototype.fill() is deprecated! Use Store.prototype.pull() instead!");
-            options = options || {};
-            var query = options.query;
-            if (query) { delete options.query; }
-            return this.pull(query, options, callback);
-        },
         pull: function(query, options) {  // fill, populate, pull (from remoteStore), fetch...
             typeof options === "undefined" && (options = {});
             typeof query === "undefined" && (query = {});
@@ -194,7 +187,7 @@ function namespace(root) {
             return when(this._prepareQuery(this._remoteStore.getQueryEngine(), query), function(query) {
                 return when(this._remoteStore.find(query, options), function(objectList) {
                     return whenIter(objectList, function(obj, i) {
-                        return when(options.decompose ? self.decompose(obj) : self._localStore.add(obj), function(obj) {
+                        return when(self.decompose(obj), function(obj) {
                             objectList[i] = obj;
                         });
                     });
