@@ -74,6 +74,9 @@ function namespace(root) {
         },
         clean: function() {
             throw Error("Not Implemented Error");
+        },
+        isNull: function() {
+            throw Error("Not Implemented Error");
         }
     };
 
@@ -112,6 +115,9 @@ function namespace(root) {
             return obj;
         },
         destroy: function() {
+        },
+        isNull: function() {
+            return false;
         }
     }, Object.create(IStore.prototype));
 
@@ -206,7 +212,7 @@ function namespace(root) {
                 var old = this.store.getObjectAccessor().getObjectState(dirty.obj);
                 dirty.store.getObjectAccessor().delTmpPk(dirty.obj);
                 return this.store.getRemoteStore().add(dirty.obj).then(function(obj) {
-                    return when(dirty.store._localStore.update(obj), function(obj) {  // use decompose()
+                    return when(dirty.store._localStore.update(obj), function(obj) {  // use decompose(obj, obj)
                         return when(dirty.store.syncDependencies(obj, old), function() {
                             return obj;
                         });
@@ -217,7 +223,7 @@ function namespace(root) {
             }, function() {  // onPending
                 var dirty = this;
                 this.store.getObjectAccessor().setTmpPk(dirty.obj);
-                return when(dirty.store._localStore.add(dirty.obj), function(obj) {
+                return when(dirty.store._localStore.add(dirty.obj), function(obj) {  // use decompose(dirty.obj)
                     dirty.obj = obj;
                     return when(obj);
                 });
@@ -229,7 +235,7 @@ function namespace(root) {
                     // Usually aggregate uses optimistic offline lock of whole aggregate
                     // for concurrency control.
                     // So, we don't have to sync aggregate here, but we have to set at least PK and default values.
-                    return when(dirty.store._localStore.add(dirty.obj), function(obj) {  // use decompose()
+                    return when(dirty.store._localStore.add(dirty.obj), function(obj) {  // use decompose(dirty.obj)
                         dirty.obj = obj;
                         return when(obj);
                     });
@@ -242,7 +248,7 @@ function namespace(root) {
             return this._getTransaction().update(this, obj, old, function() {
                 var dirty = this;
                 return this.store.getRemoteStore().update(dirty.obj).then(function(obj) {
-                    return dirty.store._localStore.update(obj);  // use decompose()
+                    return dirty.store._localStore.update(obj);  // use decompose(obj, obj)
                 });
             }, function() {
                 var dirty = this;
@@ -1135,20 +1141,24 @@ function namespace(root) {
             return clone(obj, {});
         },
         pkExists: function(obj) {
-            return toArray(this.getPk(obj)).filter(function(val) {
-                return val !== null && typeof val !== "undefined";
+            var self = this;
+            return toArray(this.getPk(obj)).filter(function(value) {
+                return self._pkValueIsDefined(value);
             }).length === toArray(this.pk).length;
+        },
+        _pkValueIsDefined: function(value) {
+            return value !== null && typeof value !== "undefined";
         },
         setTmpPk: function(obj) {
             var pkValue = this.getPk(obj);
             if (pkValue instanceof Array) {
                 for (var i = 0; i < pkValue.length; i++) {
-                    if (typeof pkValue[i] === "undefined") {
+                    if (!this._pkValueIsDefined(pkValue[i])) {
                         pkValue[i] = this._makeTmpId();
                     }
                 }
             } else {
-                if (typeof pkValue === "undefined") {
+                if (!this._pkValueIsDefined(pkValue[i])) {
                     pkValue = this._makeTmpId();
                 }
             }
@@ -1763,9 +1773,9 @@ function namespace(root) {
                 this._disposable.dispose();
                 this._disposable = new CompositeDisposable();
 
-            } else if (!this.observed().isObservable()) {
+            } else if (this.observed().isNull()) {
                 for (var i = 0; i < this._relatedSubjects.length; i++) {
-                    if (!this._relatedSubjects[i].observed().isObservable()) {
+                    if (this._relatedSubjects[i].observed().isNull()) {
                         this._relatedSubjects[i].observe(enable);
                     }
                 };
@@ -1860,7 +1870,7 @@ function namespace(root) {
         },
         addRelatedSubject: function(relatedSubject) {
             this._relatedSubjects.push(relatedSubject);
-            if (this.observed().isObservable()) {
+            if (!this.observed().isNull()) {
                 this._disposable = this._disposable.add(
                     relatedSubject.observed().attach(['add', 'update', 'delete'], this._getBroadObserver())
                 );
@@ -1980,7 +1990,7 @@ function namespace(root) {
 
     function SubResult(subject, reproducer, filter, objectList, relatedSubjects) {
         Result.apply(this, arguments);
-        if (subject.observed().isObservable()) {
+        if (!subject.observed().isNull()) {
             this.observe();
         }
     }
@@ -2218,6 +2228,7 @@ function namespace(root) {
         },
         onConflict: function(newObj, oldObj) {
             var self = this;
+            // TODO: Fix memory leak in AbstractLeafStore._objectStateMapping for unused object
             clone(newObj, oldObj, function(obj, attr, value) {
                 return self.getObjectAccessor().setValue(obj, attr, value);
             });
@@ -2486,7 +2497,10 @@ function namespace(root) {
         AbstractLeafStore.call(this, options);
     }
     DummyStore.prototype = clone({
-        constructor: DummyStore
+        constructor: DummyStore,
+        isNull: function() {
+            return true;
+        }
     }, Object.create(AbstractLeafStore.prototype));
 
 
@@ -2725,7 +2739,7 @@ function namespace(root) {
 
 
     function TransactionManager(registry) {
-        this._transaction = new NoneTransaction(registry);
+        this._transaction = new DummyTransaction(registry);
     }
     TransactionManager.prototype = {
         constructor: TransactionManager,
@@ -2778,6 +2792,9 @@ function namespace(root) {
         },
         delete: function(store, obj, onCommit, onRollback, onPending, onAutocommit) {
             throw Error("Not Implemented Error!");
+        },
+        isNull: function() {
+            throw Error("Not Implemented Error");
         }
     };
 
@@ -2852,6 +2869,9 @@ function namespace(root) {
                 }
             }
             return -1;
+        },
+        isNull: function() {
+            return false;
         }
     }, Object.create(AbstractTransaction.prototype));
 
@@ -2873,14 +2893,20 @@ function namespace(root) {
             return false;
         },
         compare: function(other) {
-            var weight = this.getWeight() - other.getWeight();
-            if (weight !== 0) {
-                return weight;
+            var weightByOperation = this.getWeight() - other.getWeight();
+            if (weightByOperation !== 0) {
+                return weightByOperation;
             }
-            // if (this.store.getRemoteStore() instanceof DummyStore) {
-            //     return weight;
-            // }
-            return this._doCompare(other);
+            // handle the root of aggregates in the last
+            var weightInAggregate = other.store.getRemoteStore().isNull() - this.store.getRemoteStore().isNull();
+            if (weightInAggregate !== 0) {
+                return weightInAggregate;
+            }
+            var weightByDependencies = this._compareByDependencies(other);
+            if (weightByDependencies !== 0) {
+                return weightByDependencies;
+            }
+            return this._compareByPk(other);
         },
         getWeight: function() {
             throw Error("Not Implemented Error!");
@@ -2897,9 +2923,6 @@ function namespace(root) {
         rollback: function() {
             throw Error("Not Implemented Error!");
         },
-        _doCompare: function(other) {
-            throw Error("Not Implemented Error!");
-        },
         _compareByDependencies: function(other) {
             if (this.store === other.store) {
                 return 0;
@@ -2911,6 +2934,29 @@ function namespace(root) {
             var otherDependencies = this.store.getDependencies();
             if (otherDependencies.indexOf(this.store) !== -1) {
                 return -1;
+            }
+            return 0;
+        },
+        _compareByPk: function(other) {
+            if (this.store !== other.store) {
+                return 0;
+            }
+            var objectAccessor = this.store.getObjectAccessor();
+            var pk = toArray(objectAccessor.getPk(this.obj));
+            var otherPk = toArray(objectAccessor.getPk(other.obj));
+            for (var i = 0; i < pk.length; i++) {
+                var weightByExistence = bool(otherPk[i]) - bool(pk[i]);
+                if (weightByExistence !== 0) {
+                    return weightByExistence;
+                }
+                // The value can be a string, therefore we can't to use return otherPk[i] - pk[i]
+                if (pk[i] === otherPk[i]) {
+                    return 0;
+                } else if (pk[i] < otherPk[i]) {
+                    return -1;
+                } else {
+                    return 1;
+                }
             }
             return 0;
         }
@@ -2927,9 +2973,6 @@ function namespace(root) {
         },
         getWeight: function() {
             return 0;
-        },
-        _doCompare: function(other) {
-            return this._compareByDependencies(other);
         }
     }, Object.create(AbstractDirty.prototype));
 
@@ -2943,7 +2986,7 @@ function namespace(root) {
         getWeight: function() {
             return 1;
         },
-        _doCompare: function(other) {
+        _compareByDependencies: function(other) {
             return 0;
         }
     }, Object.create(AbstractDirty.prototype));
@@ -2957,17 +3000,17 @@ function namespace(root) {
         getWeight: function() {
             return 2;
         },
-        _doCompare: function(other) {
-            return -1 * this._compareByDependencies(other);
+        _compareByDependencies: function(other) {
+            return -1 * AbstractDirty.prototype._compareByDependencies.call(this, other);
         }
     }, Object.create(AbstractDirty.prototype));
 
 
-    function NoneTransaction(registry) {
+    function DummyTransaction(registry) {
         AbstractTransaction.call(this, registry);
     }
-    NoneTransaction.prototype = clone({
-        constructor: NoneTransaction,
+    DummyTransaction.prototype = clone({
+        constructor: DummyTransaction,
         begin: function() {
             return new TwoPhaseTransaction(this._registry, this);
         },
@@ -2985,6 +3028,9 @@ function namespace(root) {
         },
         delete: function(store, obj, onCommit, onRollback, onPending, onAutocommit) {
             return new DeleteDirty(store, obj, onCommit, onRollback, onPending, onAutocommit).autocommit();
+        },
+        isNull: function() {
+            return true;
         }
     }, Object.create(AbstractTransaction.prototype));
 
@@ -3020,7 +3066,7 @@ function namespace(root) {
         notify: function(aspect/*, ...*/) {
             throw Error("Not Implemented Error!");
         },
-        isObservable: function() {
+        isNull: function() {
             throw Error("Not Implemented Error!");
         }
     };
@@ -3099,8 +3145,8 @@ function namespace(root) {
             }
             return this;
         },
-        isObservable: function() {
-            return true;
+        isNull: function() {
+            return false;
         }
     }, Object.create(IObservable.prototype));
 
@@ -3184,8 +3230,8 @@ function namespace(root) {
         notify: function(aspect/*, ...*/) {
             return this;
         },
-        isObservable: function() {
-            return false;
+        isNull: function() {
+            return true;
         }
     }, Object.create(IObservable.prototype));
 
