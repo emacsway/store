@@ -2888,14 +2888,20 @@ function namespace(root) {
             return false;
         },
         compare: function(other) {
-            var weight = this.getWeight() - other.getWeight();
-            if (weight !== 0) {
-                return weight;
+            var weightByOperation = this.getWeight() - other.getWeight();
+            if (weightByOperation !== 0) {
+                return weightByOperation;
             }
-            // if (this.store.getRemoteStore() instanceof DummyStore) {
-            //     return weight;
-            // }
-            return this._doCompare(other);
+            // handle the root of aggregates in the last
+            var weightInAggregate = other.store.getRemoteStore().isNull() - this.store.getRemoteStore().isNull();
+            if (weightInAggregate !== 0) {
+                return weightInAggregate;
+            }
+            var weightByDependencies = this._compareByDependencies(other);
+            if (weightByDependencies !== 0) {
+                return weightByDependencies;
+            }
+            return this._compareByPk(other);
         },
         getWeight: function() {
             throw Error("Not Implemented Error!");
@@ -2912,9 +2918,6 @@ function namespace(root) {
         rollback: function() {
             throw Error("Not Implemented Error!");
         },
-        _doCompare: function(other) {
-            throw Error("Not Implemented Error!");
-        },
         _compareByDependencies: function(other) {
             if (this.store === other.store) {
                 return 0;
@@ -2926,6 +2929,29 @@ function namespace(root) {
             var otherDependencies = this.store.getDependencies();
             if (otherDependencies.indexOf(this.store) !== -1) {
                 return -1;
+            }
+            return 0;
+        },
+        _compareByPk: function(other) {
+            if (this.store !== other.store) {
+                return 0;
+            }
+            var objectAccessor = this.store.getObjectAccessor();
+            var pk = toArray(objectAccessor.getPk(this.obj));
+            var otherPk = toArray(objectAccessor.getPk(other.obj));
+            for (var i = 0; i < pk.length; i++) {
+                var weightByExistence = bool(otherPk[i]) - bool(pk[i]);
+                if (weightByExistence !== 0) {
+                    return weightByExistence;
+                }
+                // The value can be a string, therefore we can't to use return otherPk[i] - pk[i]
+                if (pk[i] === otherPk[i]) {
+                    return 0;
+                } else if (pk[i] < otherPk[i]) {
+                    return -1;
+                } else {
+                    return 1;
+                }
             }
             return 0;
         }
@@ -2942,9 +2968,6 @@ function namespace(root) {
         },
         getWeight: function() {
             return 0;
-        },
-        _doCompare: function(other) {
-            return this._compareByDependencies(other);
         }
     }, Object.create(AbstractDirty.prototype));
 
@@ -2958,7 +2981,7 @@ function namespace(root) {
         getWeight: function() {
             return 1;
         },
-        _doCompare: function(other) {
+        _compareByDependencies: function(other) {
             return 0;
         }
     }, Object.create(AbstractDirty.prototype));
@@ -2972,8 +2995,8 @@ function namespace(root) {
         getWeight: function() {
             return 2;
         },
-        _doCompare: function(other) {
-            return -1 * this._compareByDependencies(other);
+        _compareByDependencies: function(other) {
+            return -1 * AbstractDirty.prototype._compareByDependencies.call(this, other);
         }
     }, Object.create(AbstractDirty.prototype));
 

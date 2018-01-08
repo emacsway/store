@@ -33,6 +33,9 @@ define(['../store', './utils'], function(store, utils) {
             delete: function(obj) {
                 this._endpoint.push(['delete', obj]);
                 return store.DummyStore.prototype.delete.apply(this, arguments);
+            },
+            isNull: function() {
+                return false;
             }
         }, Object.create(store.DummyStore.prototype));
 
