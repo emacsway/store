@@ -2209,8 +2209,19 @@ function namespace(root) {
             return Promise.resolve(obj);
         },
         decompose: function(record, associatedObj) {
+            var self = this;
             var obj = this.restoreObject(record);
-            return this.add(obj);
+            if (!associatedObj && this.getObjectAccessor().pkExists(obj)) {
+                associatedObj = this.get(
+                    this.getObjectAccessor().getPk(obj)
+                );
+            }
+            return when(associatedObj, function(associatedObj) {
+                if (associatedObj) {
+                    return self.onConflict(obj, associatedObj);
+                }
+                return this.add(obj);
+            });
         },
         onConflict: function(newObj, oldObj) {
             var self = this;
