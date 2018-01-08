@@ -1141,20 +1141,24 @@ function namespace(root) {
             return clone(obj, {});
         },
         pkExists: function(obj) {
-            return toArray(this.getPk(obj)).filter(function(val) {
-                return val !== null && typeof val !== "undefined";
+            var self = this;
+            return toArray(this.getPk(obj)).filter(function(value) {
+                return self._pkValueIsDefined(value);
             }).length === toArray(this.pk).length;
+        },
+        _pkValueIsDefined: function(value) {
+            return value !== null && typeof value !== "undefined";
         },
         setTmpPk: function(obj) {
             var pkValue = this.getPk(obj);
             if (pkValue instanceof Array) {
                 for (var i = 0; i < pkValue.length; i++) {
-                    if (pkValue[i] === null || typeof pkValue[i] === "undefined") {
+                    if (!this._pkValueIsDefined(pkValue[i])) {
                         pkValue[i] = this._makeTmpId();
                     }
                 }
             } else {
-                if (pkValue === null || typeof pkValue === "undefined") {
+                if (!this._pkValueIsDefined(pkValue[i])) {
                     pkValue = this._makeTmpId();
                 }
             }
