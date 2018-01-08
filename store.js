@@ -212,7 +212,8 @@ function namespace(root) {
                 var old = this.store.getObjectAccessor().getObjectState(dirty.obj);
                 dirty.store.getObjectAccessor().delTmpPkValues(dirty.obj);
                 return this.store.getRemoteStore().add(dirty.obj).then(function(obj) {
-                    return when(dirty.store._localStore.update(obj), function(obj) {  // use decompose(obj, obj)
+                    // We have to handle the whole aggregate received from the server
+                    return when(dirty.store.decompose(obj, obj), function(obj) {
                         return when(dirty.store.syncDependencies(obj, old), function() {
                             return obj;
                         });
@@ -223,14 +224,16 @@ function namespace(root) {
             }, function() {  // onPending
                 var dirty = this;
                 this.store.getObjectAccessor().populateTmpPkValues(dirty.obj);
-                return when(dirty.store._localStore.add(dirty.obj), function(obj) {  // use decompose(dirty.obj)
+                // Don't use decompose here, we use Store API to add object to aggregate
+                return when(dirty.store._localStore.add(dirty.obj), function(obj) {
                     dirty.obj = obj;
                     return when(obj);
                 });
             }, function() {  // onAutoCommit
                 var dirty = this;
                 return when(dirty.store.getRemoteStore().add(dirty.obj), function(obj) {
-                    return when(dirty.store._localStore.add(dirty.obj), function(obj) {  // use decompose(dirty.obj)
+                    // We have to handle the whole aggregate received from the server
+                    return when(dirty.store.decompose(dirty.obj), function(obj) {
                         dirty.obj = obj;
                         return when(obj);
                     });
@@ -243,10 +246,12 @@ function namespace(root) {
             return this._getTransaction().update(this, obj, old, function() {
                 var dirty = this;
                 return this.store.getRemoteStore().update(dirty.obj).then(function(obj) {
-                    return dirty.store._localStore.update(obj);  // use decompose(obj, obj)
+                    // We have to handle the whole aggregate received from the server
+                    return dirty.store.decompose(obj, obj);
                 });
             }, function() {
                 var dirty = this;
+                // Don't use decompose here, we track each object of aggregate during transaction
                 return when(this.store._localStore.update(clone(dirty.old, dirty.obj, function(obj, attr, value) {
                     return dirty.store.getObjectAccessor().setValue(obj, attr, value);
                 })));
