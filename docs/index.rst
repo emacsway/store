@@ -941,24 +941,29 @@ Alternatives, related and useful links
   Dojo1 implementation of `Repository`_ pattern.
 - `JS-Data <http://www.js-data.io/>`_ - \
   Object-Relational Mapping (ORM) written by JavaScript for relational data. Does not support composite relations.
-- `Normalizr <https://github.com/paularmstrong/normalizr>`_ - \
-  Normalizes (decomposes) nested JSON according to a schema.
-- `Denormalizr <https://github.com/gpbl/denormalizr>`_ - \
-  Denormalize data normalized with normalizr.
-- `RxJS <https://github.com/Reactive-Extensions/RxJS>`_ - \
-  The Reactive Extensions for JavaScript.
 - `9 JavaScript Libraries for Working with Local Storage <https://www.sitepoint.com/9-javascript-libraries-working-with-local-storage/>`_ - \
   article with interesting comments.
 - `Kinvey Data Store <http://devcenter.kinvey.com/angular/guides/datastore>`_ - \
   implementation of `Repository`_ pattern by MBaaS Kinvey, `source code <https://github.com/Kinvey/js-sdk/tree/master/src/datastore/src>`__
 - `Pocket.js <https://github.com/vincentracine/pocketjs>`_ - \
   a wrapper for the window.localStorage. It provides helpful methods which utilise MongoDB's proven syntax and provides a powerful lightweight abstraction from the complexity of managing and querying local storage.
+- `ZangoDB <https://erikolson186.github.io/zangodb/>`_ is a MongoDB-like interface for HTML5 IndexedDB that supports most of the familiar filtering, projection, sorting, updating and aggregation features of MongoDB, for usage in the web browser (`source code <https://github.com/erikolson186/zangodb>`__).
+- `JsStore <http://jsstore.net/>`_ is Sql Like IndexedDb Wrapper. It provides simple api to store, retrieve, delete, remove, and for other advanced Database functionalities (`source code <https://github.com/ujjwalguptaofficial/JsStore>`__).
+
+- `Normalizr <https://github.com/paularmstrong/normalizr>`_ - \
+  Normalizes (decomposes) nested JSON according to a schema.
+- `Denormalizr <https://github.com/gpbl/denormalizr>`_ - \
+  Denormalize data normalized with normalizr.
+- `RxJS <https://github.com/Reactive-Extensions/RxJS>`_ - \
+  The Reactive Extensions for JavaScript.
 
 Examples of the simplest implementations of the Repository pattern by JavaScript in the project `todomvc.com <http://todomvc.com/>`_:
 
-- Angular2: https://github.com/tastejs/todomvc/blob/gh-pages/examples/angular2/app/services/store.ts
-- Angular1: https://github.com/tastejs/todomvc/blob/gh-pages/examples/angularjs/js/services/todoStorage.js
-- React: https://github.com/tastejs/todomvc/blob/gh-pages/examples/react-alt/js/stores/todoStore.js
+- Angular2+: https://github.com/tastejs/todomvc/blob/master/examples/angular2/app/services/store.ts
+- Angular2+: https://github.com/tastejs/todomvc/blob/master/examples/angular2_es2015/app/services/todo-store.service.js
+- AngularJS: https://github.com/tastejs/todomvc/blob/master/examples/angularjs/js/services/todoStorage.js
+- React: https://github.com/tastejs/todomvc/blob/master/examples/react/js/todoModel.js
+- React+Alt: https://github.com/tastejs/todomvc/blob/master/examples/react-alt/js/stores/todoStore.js
 
 
 .. _Coupling: http://wiki.c2.com/?CouplingAndCohesion
