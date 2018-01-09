@@ -412,53 +412,34 @@ function namespace(root) {
         },
         add:  function(obj, state) {
             var self = this;
-            return when(this._checkReferentialIntegrity(obj), function() {
+            return when(this._checkReferentialIntegrityBottomUp(obj), function() {
                 return __super__(PreObservableStoreAspect, self).add.call(self, obj);
             });
         },
         update:  function(obj, state) {
             var self = this;
-            return when(this._checkReferentialIntegrity(obj), function() {
+            return when(this._checkReferentialIntegrityBottomUp(obj), function() {
                 return __super__(PreObservableStoreAspect, self).update.call(self, obj);
             });
         },
         delete:  function(obj, state, remoteCascade) {
             var self = this;
-            return when(this._checkRelatedReferentialIntegrity(obj), function() {
+            return when(this._checkReferentialIntegrityTopDown(obj), function() {
                 return __super__(PreObservableStoreAspect, self).delete.call(self, obj, state, remoteCascade);
             });
         },
-        _checkReferentialIntegrity: function(obj) {
-            var self = this;
-            return whenIter(keys(this.relations.foreignKey), function(relationName) {
-                var relation = self.relations.foreignKey[relationName];
-                var relatedStore = relation.getRelatedStore();
-                var value = relation.getValue(obj);
-                var checkValue = value.filter(function(val) { return !!val; });
-                if (!checkValue.length) { return; }
-                return when(relatedStore.findList(relation.getRelatedQuery(obj)), function(relatedObjectList) {
-                    var relatedObj = relatedObjectList[0];
-                    if (typeof relatedObj === "undefined") {
-                        throw Error("Referential Integrity Error! Trying to add object with non-added relations!");
-                    }
-                    return obj;
-                });
+        _checkReferentialIntegrityBottomUp: function(obj) {
+            return whenIter(this.getRelations(), function(relation) {
+                return relation.checkReferentialIntegrityBottomUp(
+                    obj, "Referential Integrity Error! Trying to add object with non-added relations!"
+                );
             });
         },
-        _checkRelatedReferentialIntegrity: function(obj) {
-            var self = this;
-            return whenIter(keys(this.relations.oneToMany), function(relationName) {
-                var relation = self.relations.oneToMany[relationName];
-                var relatedStore = relation.getRelatedStore();
-                var value = relation.getValue(obj);
-                var checkValue = value.filter(function(val) { return !!val; });
-                if (!checkValue.length) { return; }
-                return when(relatedStore.findList(relation.getRelatedQuery(obj)), function(relatedObjectList) {
-                    if (relatedObjectList.length) {
-                        throw Error("Referential Integrity Error! Trying to delete object with non-deleted relations!");
-                    }
-                    return obj;
-                });
+        _checkReferentialIntegrityTopDown: function(obj) {
+            return whenIter(this.getRelations(), function(relation) {
+                return relation.checkReferentialIntegrityTopDown(
+                    obj, "Referential Integrity Error! Trying to delete object with non-deleted relations!"
+                );
             });
         }
     };
@@ -750,6 +731,25 @@ function namespace(root) {
                 clone(query, finalQuery);
                 return relatedStore.find(finalQuery);
             };
+        },
+        checkReferentialIntegrityBottomUp: function(obj, errorMessage) {
+            return obj;
+        },
+        checkReferentialIntegrityTopDown: function(obj, errorMessage) {
+            return obj;
+        },
+        _checkReferentialIntegrity: function(obj, errorMessage) {
+            var relation = this;
+            var relatedStore = relation.getRelatedStore();
+            var value = relation.getValue(obj);
+            var checkValue = value.filter(function(val) { return !!val; });
+            if (!checkValue.length) { return; }
+            return when(relatedStore.findList(relation.getRelatedQuery(obj)), function(relatedObjectList) {
+                if (relatedObjectList.length) {
+                    throw Error(errorMessage || "Referential Integrity Error!");
+                }
+                return obj;
+            });
         }
     };
 
@@ -766,6 +766,7 @@ function namespace(root) {
             return this.store.getName() + 'Set';
         },
         propagateBottomUp: AbstractRelation.prototype._propagate,
+        checkReferentialIntegrityBottomUp: AbstractRelation.prototype._checkReferentialIntegrity,
         makeModelRelationGetter: AbstractRelation.prototype._makeModelRelatedObjectGetter,
         setupReverseRelation: function() {
             if (!this.store.getRegistry().has(this.relatedStore)) {
@@ -798,8 +799,10 @@ function namespace(root) {
         }
         if (!this.reverse) {
             this.propagateBottomUp = this._propagate;
+            this.checkReferentialIntegrityBottomUp = this._checkReferentialIntegrity;
         } else {
             this.propagateTopDown = this._propagate;
+            this.checkReferentialIntegrityTopDown = this._checkReferentialIntegrity;
             this.syncRelatedObjects = this._syncRelatedObjects;
         }
     }
@@ -840,6 +843,7 @@ function namespace(root) {
     OneToMany.prototype = clone({
         constructor: OneToMany,
         propagateTopDown: AbstractRelation.prototype._propagate,
+        checkReferentialIntegrityTopDown: AbstractRelation.prototype._checkReferentialIntegrity,
         syncRelatedObjects: AbstractRelation.prototype._syncRelatedObjects,
         makeModelRelationGetter: AbstractRelation.prototype._makeModelRelatedObjectCollectionGetter
     }, Object.create(AbstractRelation.prototype));
