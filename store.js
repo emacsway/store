@@ -456,15 +456,15 @@ function namespace(root) {
         },
         getRequiredIndexes: function() {
             var indexes = __super__(RelationalStoreAspect, this).getRequiredIndexes.call(this).slice();
-            if (!this.relations) { return indexes; } // Called from CompositeStore()
-            for (var relationName in this.relations.foreignKey) {
-                var fields = this.relations.foreignKey[relationName].getField();
-                for (var i = 0; i < fields.length; i++) {
-                    if (indexes.indexOf(fields[i]) === -1) {
-                        indexes.push(fields[i]);
+            if (!this._relations) { return indexes; } // Called from CompositeStore()
+            this.getRelations().forEach(function(relation) {
+                if (relation instanceof ManyToMany) { return; } // ManyToMany does not have own fields
+                relation.getField().forEach(function(field) {
+                    if (indexes.indexOf(field) === -1) {
+                        indexes.push(field);
                     }
-                }
-            }
+                });
+            });
             return indexes;
         },
         register: function(name, registry) {
