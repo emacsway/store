@@ -550,9 +550,25 @@ function namespace(root) {
             });
         },
         getRelation: function(name) {
-            for (var relationType in this.relations) {
-                if (name in this.relations[relationType]) {
-                    return this.relations[relationType][name];
+            return this._relations[name];
+        },
+        getRelations: function() {
+            return values(this._relations);
+        },
+        addRelation: function(name, relation) {
+            relation.name = name;
+            relation.store = this;
+            this._relations[name] = relation;
+            var classMapping = {  // TODO: Remove me on refactoring finish.
+                foreignKey: ForeignKey,
+                oneToOne: OneToOne,
+                oneToMany: OneToMany,
+                manyToMany: ManyToMany
+            };
+            for (var key in classMapping) {
+                if (classMapping[key] === relation.constructor) {
+                    this.relations[key][name] = this._relations[name];
+                    break;
                 }
             }
         },
@@ -564,21 +580,19 @@ function namespace(root) {
         },
         _initRelations: function(relations) {
             this.relations = relations ? relations : {};
+            this._relations = {};
             var classMapping = {
                 foreignKey: ForeignKey,
                 oneToOne: OneToOne,
                 oneToMany: OneToMany,
                 manyToMany: ManyToMany
             };
-            for (var type in classMapping) {
-                if (!(type in this.relations)) {
-                    this.relations[type] = {};
+            for (var key in classMapping) {
+                if (!(key in this.relations)) {
+                    this.relations[key] = {};
                 }
-                for (var name in this.relations[type]) {
-                    var params = this.relations[type][name];
-                    params['name'] = name;
-                    params['store'] = this;
-                    this.relations[type][name] = new classMapping[type](params);
+                for (var name in this.relations[key]) {
+                    this.addRelation(name, new classMapping[key](this.relations[key][name]));
                 }
             }
         },
@@ -744,16 +758,14 @@ function namespace(root) {
             if (!this.store.getRegistry().has(this.relatedStore)) {
                 return;
             }
-            if (this.relatedName in this.getRelatedStore().relations.oneToMany) {
+            if (this.getRelatedStore().getRelation(this.relatedName)) {
                 return;
             }
             var relatedParams = {
                 field: this.relatedField,
                 relatedField: this.field,
                 relatedStore: this.store.getName(),
-                relatedName: this.name,
-                name: this.relatedName,
-                store: this.getRelatedStore()
+                relatedName: this.name
             };
             if ('onUpdate' in this) {
                 relatedParams['onUpdate'] = this['onUpdate'];
@@ -761,7 +773,7 @@ function namespace(root) {
             if ('onDelete' in this) {
                 relatedParams['onDelete'] = this['onDelete'];
             };
-            this.getRelatedStore().relations.oneToMany[relatedParams.name] = new OneToMany(relatedParams);
+            this.getRelatedStore().addRelation(this.relatedName, new OneToMany(relatedParams));
         }
     }, Object.create(AbstractRelation.prototype));
 
@@ -778,7 +790,7 @@ function namespace(root) {
             if (!this.store.getRegistry().has(this.relatedStore)) {
                 return;
             }
-            if (this.relatedName in this.getRelatedStore().relations.oneToMany) {
+            if (this.getRelatedStore().getRelation(this.relatedName)) {
                 return;
             }
             var relatedParams = {
@@ -786,9 +798,7 @@ function namespace(root) {
                 relatedField: this.field,
                 relatedStore: this.store.getName(),
                 relatedName: this.name,
-                name: this.relatedName,
-                store: this.getRelatedStore(),
-                reverse: true
+                reverse: !this.reverse
             };
             if ('onUpdate' in this) {
                 relatedParams['onUpdate'] = this['onUpdate'];
@@ -796,7 +806,7 @@ function namespace(root) {
             if ('onDelete' in this) {
                 relatedParams['onDelete'] = this['onDelete'];
             };
-            this.getRelatedStore().relations.oneToMany[relatedParams.name] = new OneToOne(relatedParams);
+            this.getRelatedStore().addRelation(this.relatedName, new OneToOne(relatedParams));
         }
     }, Object.create(ForeignKey.prototype));
 
@@ -3472,6 +3482,16 @@ function namespace(root) {
         for (var i in obj) {
             if (!obj.hasOwnProperty(i)) { continue };
             r.push(i);
+        }
+        return r;
+    }
+
+
+    function values(obj) {
+        var r = [];
+        for (var i in obj) {
+            if (!obj.hasOwnProperty(i)) { continue };
+            r.push(obj[i]);
         }
         return r;
     }
