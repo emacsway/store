@@ -620,63 +620,19 @@ function namespace(root) {
             }).iterate();
         },
         _setupReverseRelations: function(store) {
-            for (var relationName in store.relations.foreignKey) {
-                var relation = store.relations.foreignKey[relationName];
+            store.getRelations().forEach(function(relation) {
                 relation.setupReverseRelation();
-            }
+            });
         },
         _propagateTopDownRelations: function(onAction, obj, old, state) {
-            var self = this;
-            return new Iterator(keys(self.relations.oneToMany)).onEach(function(relationName, resolve, reject) {
-                self._propagateByRelation(onAction, obj, old, self.relations.oneToMany[relationName], state).then(resolve, reject);
-            }).iterate().then(function() {
-                return new Iterator(keys(self.relations.manyToMany)).onEach(function(relationName, resolve, reject) {
-                    self._propagateByM2m(onAction, obj, old, self.relations.manyToMany[relationName], state).then(resolve, reject);
-                }).iterate();
-            });
+            return new Iterator(this.getRelations()).onEach(function(relation, resolve, reject) {
+                when(relation.propagateTopDown(onAction, obj, old, state), resolve, reject);
+            }).iterate();
         },
         _propagateBottomUpRelations: function(onAction, obj, old, state) {
-            var self = this;
-            return new Iterator(keys(self.relations.foreignKey)).onEach(function(relationName, resolve, reject) {
-                self._propagateByRelation(onAction, obj, old, self.relations.foreignKey[relationName], state).then(resolve, reject);
-            }).iterate().then(function() {
-                return new Iterator(keys(self.relations.manyToMany)).onEach(function(relationName, resolve, reject) {
-                    self._propagateByM2m(onAction, obj, old, self.relations.manyToMany[relationName], state).then(resolve, reject);
-                }).iterate();
-            });
-        },
-        _propagateByRelation: function(onAction, obj, old, relation, state) {
-            if (!(onAction in relation)) {
-                return Promise.resolve();
-            }
-            var relatedStore = relation.getRelatedStore();
-            var query = relation.getRelatedQuery(obj);
-            return when(relatedStore.findList(query), function(relatedObjectList) {
-                return new Iterator(relatedObjectList).onEach(function(relatedObj, resolve, reject) {
-                    return new Iterator(toArray(relation[onAction])).onEach(function(action, resolve, reject) {
-                        action(relatedObj, obj, old, relation, state).then(resolve, reject);
-                    }).iterate().then(
-                        resolve, reject
-                    );
-                }).iterate();
-            });
-        },
-        _propagateByM2m: function(onAction, obj, old, m2mRelation, state) {
-            if (!(onAction in m2mRelation)) {
-                return;
-            }
-            var relatedStore = m2mRelation.getRelatedStore();
-            var relation = this.relations.oneToMany[m2mRelation.relation];
-            var query = m2mRelation.getRelatedQuery(obj);
-            return when(relatedStore.findList(query), function(relatedObjectList) {
-                return new Iterator(relatedObjectList).onEach(function(relatedObj, resolve, reject) {
-                    return new Iterator(toArray(m2mRelation[onAction])).onEach(function(action, resolve, reject) {
-                        action(relatedObj, obj, old, relation, state).then(resolve, reject);
-                    }).iterate().then(
-                        resolve, reject
-                    );
-                }).iterate();
-            });
+            return new Iterator(this.getRelations()).onEach(function(relation, resolve, reject) {
+                when(relation.propagateBottomUp(onAction, obj, old, state), resolve, reject);
+            }).iterate();
         }
     };
 
@@ -739,6 +695,29 @@ function namespace(root) {
         },
         getRelatedRelation: function() {
             return this.getRelatedStore().getRelation(this.relatedName);
+        },
+        propagateTopDown: function(onAction, obj, old, state) {
+            return Promise.resolve();
+        },
+        propagateBottomUp: function(onAction, obj, old, state) {
+            return Promise.resolve();
+        },
+        _propagate: function(onAction, obj, old, state) {
+            var relation = this;
+            if (!(onAction in this)) {
+                return Promise.resolve();
+            }
+            var relatedStore = relation.getRelatedStore();
+            var query = relation.getRelatedQuery(obj);
+            return when(relatedStore.findList(query), function(relatedObjectList) {
+                return new Iterator(relatedObjectList).onEach(function(relatedObj, resolve, reject) {
+                    return new Iterator(toArray(relation[onAction])).onEach(function(action, resolve, reject) {
+                        action(relatedObj, obj, old, relation, state).then(resolve, reject);
+                    }).iterate().then(
+                        resolve, reject
+                    );
+                }).iterate();
+            });
         }
     };
 
@@ -754,6 +733,7 @@ function namespace(root) {
         _makeDefaultRelatedName: function() {
             return this.store.getName() + 'Set';
         },
+        propagateBottomUp: AbstractRelation.prototype._propagate,
         setupReverseRelation: function() {
             if (!this.store.getRegistry().has(this.relatedStore)) {
                 return;
@@ -780,6 +760,11 @@ function namespace(root) {
 
     function OneToOne(params) {
         ForeignKey.call(this, params);
+        if (!this.reverse) {
+            this.propagateBottomUp = this._propagate;
+        } else {
+            this.propagateTopDown = this._propagate;
+        }
     }
     OneToOne.prototype = clone({
         constructor: OneToOne,
@@ -815,12 +800,18 @@ function namespace(root) {
         AbstractRelation.call(this, params);
     }
     OneToMany.prototype = clone({
-        constructor: OneToMany
+        constructor: OneToMany,
+        propagateTopDown: AbstractRelation.prototype._propagate
     }, Object.create(AbstractRelation.prototype));
 
 
     function ManyToMany(params) {
         AbstractRelation.call(this, params);
+        if (!this.reverse) {
+            this.propagateBottomUp = this._propagate;
+        } else {
+            this.propagateTopDown = this._propagate;
+        }
     }
     ManyToMany.prototype = clone({
         constructor: ManyToMany,
@@ -856,7 +847,24 @@ function namespace(root) {
             return query;
         },
         getRelatedRelation: function() {
-            return;
+        },
+        _propagate: function(onAction, obj, old, state) {
+            var m2mRelation = this;
+            if (!(onAction in m2mRelation)) {
+                return;
+            }
+            var relatedStore = m2mRelation.getRelatedStore();
+            var relation = this.store.getRelation(m2mRelation.relation);
+            var query = m2mRelation.getRelatedQuery(obj);
+            return when(relatedStore.findList(query), function(relatedObjectList) {
+                return new Iterator(relatedObjectList).onEach(function(relatedObj, resolve, reject) {
+                    return new Iterator(toArray(m2mRelation[onAction])).onEach(function(action, resolve, reject) {
+                        action(relatedObj, obj, old, relation, state).then(resolve, reject);
+                    }).iterate().then(
+                        resolve, reject
+                    );
+                }).iterate();
+            });
         }
     }, Object.create(AbstractRelation.prototype));
 
