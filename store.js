@@ -731,6 +731,25 @@ function namespace(root) {
                 // TODO: remove duplicates from orClause for case of o2m?
                 return relatedQueryResult.map(function(obj) { return relation.getQuery(obj); });
             });
+        },
+        _makeModelRelatedObjectGetter: function() {
+            var relation = this;
+            return function() {
+                var obj = this;
+                var relatedStore = relation.getRelatedStore();
+                var finalQuery = relation.getRelatedQuery(obj);
+                return relatedStore.get(finalQuery);
+            };
+        },
+        _makeModelRelatedObjectCollectionGetter: function() {
+            var relation = this;
+            return function(query) {
+                var obj = this;
+                var relatedStore = relation.getRelatedStore();
+                var finalQuery = relation.getRelatedQuery(obj);
+                clone(query, finalQuery);
+                return relatedStore.find(finalQuery);
+            };
         }
     };
 
@@ -747,6 +766,7 @@ function namespace(root) {
             return this.store.getName() + 'Set';
         },
         propagateBottomUp: AbstractRelation.prototype._propagate,
+        makeModelRelationGetter: AbstractRelation.prototype._makeModelRelatedObjectGetter,
         setupReverseRelation: function() {
             if (!this.store.getRegistry().has(this.relatedStore)) {
                 return;
@@ -772,7 +792,10 @@ function namespace(root) {
 
 
     function OneToOne(params) {
-        ForeignKey.call(this, params);
+        AbstractRelation.call(this, params);
+        if (!this.relatedName) {
+            this.relatedName = this._makeDefaultRelatedName();
+        }
         if (!this.reverse) {
             this.propagateBottomUp = this._propagate;
         } else {
@@ -785,6 +808,7 @@ function namespace(root) {
         _makeDefaultRelatedName: function() {
             return this.store.getName();
         },
+        makeModelRelationGetter: AbstractRelation.prototype._makeModelRelatedObjectGetter,
         setupReverseRelation: function() {
             if (!this.store.getRegistry().has(this.relatedStore)) {
                 return;
@@ -807,7 +831,7 @@ function namespace(root) {
             };
             this.getRelatedStore().addRelation(this.relatedName, new OneToOne(relatedParams));
         }
-    }, Object.create(ForeignKey.prototype));
+    }, Object.create(AbstractRelation.prototype));
 
 
     function OneToMany(params) {
@@ -816,7 +840,8 @@ function namespace(root) {
     OneToMany.prototype = clone({
         constructor: OneToMany,
         propagateTopDown: AbstractRelation.prototype._propagate,
-        syncRelatedObjects: AbstractRelation.prototype._syncRelatedObjects
+        syncRelatedObjects: AbstractRelation.prototype._syncRelatedObjects,
+        makeModelRelationGetter: AbstractRelation.prototype._makeModelRelatedObjectCollectionGetter
     }, Object.create(AbstractRelation.prototype));
 
 
@@ -863,6 +888,7 @@ function namespace(root) {
         },
         getRelatedRelation: function() {
         },
+        makeModelRelationGetter: AbstractRelation.prototype._makeModelRelatedObjectCollectionGetter,
         _propagate: function(onAction, obj, old, state) {
             var m2mRelation = this;
             if (!(onAction in m2mRelation)) {
@@ -2587,12 +2613,9 @@ function namespace(root) {
 
     function RelationalAccessorModelAspectFactory(getterNameFactory) {
         var factory = this;
-        this._getterNameFactory = getterNameFactory || function(relationName) {
-            return ('get' + relationName.charAt(0).toUpperCase() +
-                    relationName.slice(1).replace(/[_-]([a-z])/g, function (g) {
-                        return g[1].toUpperCase();
-                    }));
-        };
+        if (getterNameFactory) {
+            this._makeGetterName = getterNameFactory;
+        }
         this._aspect = {
             init: function(storeAccessor) {
                 factory.initAspect(this, storeAccessor());
@@ -2604,48 +2627,17 @@ function namespace(root) {
         compute: function() {
             return this._aspect;
         },
+        _makeGetterName: function(relationName) {
+            return ('get' + relationName.charAt(0).toUpperCase() +
+                    relationName.slice(1).replace(/[_-]([a-z])/g, function (g) {
+                        return g[1].toUpperCase();
+                    }));
+        },
         initAspect: function(aspect, store) {
-            this._handleForeignKey(aspect, store);
-            this._handleOneToMany(aspect, store);
-            this._handleManyToMany(aspect, store);
-        },
-        _handleForeignKey: function(aspect, store) {
             var self = this;
-            keys(store.relations.foreignKey).forEach(function(relationName) {
-                var relation = store.relations.foreignKey[relationName];
-                aspect[self._getterNameFactory(relationName)] = self._makeObjectGetter(relation);
+            store.getRelations().forEach(function(relation) {
+                aspect[self._makeGetterName(relation.name)] = relation.makeModelRelationGetter();
             });
-        },
-        _handleOneToMany: function(aspect, store) {
-            var self = this;
-            keys(store.relations.oneToMany).forEach(function(relationName) {
-                var relation = store.relations.oneToMany[relationName];
-                aspect[self._getterNameFactory(relationName)] = self._makeCollectionGetter(relation);
-            });
-        },
-        _handleManyToMany: function(aspect, store) {
-            var self = this;
-            keys(store.relations.manyToMany).forEach(function(relationName) {
-                var relation = store.relations.oneToMany[relationName];
-                aspect[self._getterNameFactory(relationName)] = self._makeCollectionGetter(relation);
-            });
-        },
-        _makeCollectionGetter: function(relation) {
-            return function(query) {
-                var obj = this;
-                var relatedStore = relation.getRelatedStore();
-                var finalQuery = relation.getRelatedQuery(obj);
-                clone(query, finalQuery);
-                return relatedStore.find(finalQuery);
-            };
-        },
-        _makeObjectGetter: function(relation) {
-            return function() {
-                var obj = this;
-                var relatedStore = relation.getRelatedStore();
-                var finalQuery = relation.getRelatedQuery(obj);
-                return relatedStore.get(finalQuery);
-            };
         }
     };
 
