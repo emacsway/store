@@ -603,20 +603,8 @@ function namespace(root) {
             });
         },
         _syncRelations: function(obj, old) {
-            var self = this;
-            return new Iterator(keys(this.relations.oneToMany)).onEach(function(relationName, resolve, reject) {
-                var relation = self.relations.oneToMany[relationName];
-                var value = relation.getValue(obj);
-                var oldValue = relation.getValue(old);
-                if (!arrayEqual(value, oldValue)) {
-                    var relatedStore = relation.getRelatedStore();
-                    when(relatedStore.findList(relation.getRelatedQuery(old)), function(relatedObjectList) {
-                        new Iterator(relatedObjectList).onEach(function(relatedObj, resolve, reject) {
-                            relatedStore.getObjectAccessor().setValue(relatedObj, relation.getRelatedField(), value);
-                            when(relatedStore._localStore.update(relatedObj), resolve, reject);
-                        }).iterate().then(resolve, reject);
-                    });
-                }
+            return new Iterator(this.getRelations()).onEach(function(relation, resolve, reject) {
+                when(relation.syncRelatedObjects(obj, old), resolve, reject);
             }).iterate();
         },
         _setupReverseRelations: function(store) {
@@ -718,6 +706,24 @@ function namespace(root) {
                     );
                 }).iterate();
             });
+        },
+        syncRelatedObjects: function(obj, old) {
+            return Promise.resolve();
+        },
+        _syncRelatedObjects: function(obj, old) {
+            var relation = this;
+            var value = this.getValue(obj);
+            var oldValue = this.getValue(old);
+            if (arrayEqual(value, oldValue)) {
+                return Promise.resolve();
+            }
+            var relatedStore = this.getRelatedStore();
+            return when(relatedStore.findList(this.getRelatedQuery(old)), function(relatedObjectList) {
+                new Iterator(relatedObjectList).onEach(function(relatedObj, resolve, reject) {
+                    relatedStore.getObjectAccessor().setValue(relatedObj, relation.getRelatedField(), value);
+                    when(relatedStore.getLocalStore().update(relatedObj), resolve, reject);
+                }).iterate();
+            });
         }
     };
 
@@ -764,6 +770,7 @@ function namespace(root) {
             this.propagateBottomUp = this._propagate;
         } else {
             this.propagateTopDown = this._propagate;
+            this.syncRelatedObjects = this._syncRelatedObjects;
         }
     }
     OneToOne.prototype = clone({
@@ -801,7 +808,8 @@ function namespace(root) {
     }
     OneToMany.prototype = clone({
         constructor: OneToMany,
-        propagateTopDown: AbstractRelation.prototype._propagate
+        propagateTopDown: AbstractRelation.prototype._propagate,
+        syncRelatedObjects: AbstractRelation.prototype._syncRelatedObjects
     }, Object.create(AbstractRelation.prototype));
 
 
@@ -816,10 +824,10 @@ function namespace(root) {
     ManyToMany.prototype = clone({
         constructor: ManyToMany,
         getField: function() {
-            return this.store.relations.oneToMany[this.relation].getField();
+            return this.store.getRelation(this.relation).getField();
         },
         getRelatedField: function() {
-            return this.getRelatedStore().relations.oneToMany[this.relatedRelation].getField();
+            return this.getRelatedStore().getRelation(this.relatedRelation).getField();
         },
         getQuery: function(relatedObj) {
             var query = {},
@@ -1662,6 +1670,7 @@ function namespace(root) {
                     return when(obj, function(obj) {
                         self._obj = obj;
                         return when(self._handleOneToMany(), function() {
+                            // TODO: Add support for OneToOne
                             return when(self._handleManyToMany(), function() {
                                 return self._obj;
                             });
