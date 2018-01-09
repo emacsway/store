@@ -566,6 +566,7 @@ function namespace(root) {
             this.relations = relations ? relations : {};
             var classMapping = {
                 foreignKey: ForeignKey,
+                oneToOne: OneToOne,
                 oneToMany: OneToMany,
                 manyToMany: ManyToMany
             };
@@ -731,11 +732,14 @@ function namespace(root) {
     function ForeignKey(params) {
         AbstractRelation.call(this, params);
         if (!this.relatedName) {
-            this.relatedName = this.store.getName() + 'Set';
+            this.relatedName = this._makeDefaultRelatedName();
         }
     }
     ForeignKey.prototype = clone({
         constructor: ForeignKey,
+        _makeDefaultRelatedName: function() {
+            return this.store.getName() + 'Set';
+        },
         setupReverseRelation: function() {
             if (!this.store.getRegistry().has(this.relatedStore)) {
                 return;
@@ -760,6 +764,41 @@ function namespace(root) {
             this.getRelatedStore().relations.oneToMany[relatedParams.name] = new OneToMany(relatedParams);
         }
     }, Object.create(AbstractRelation.prototype));
+
+
+    function OneToOne(params) {
+        ForeignKey.call(this, params);
+    }
+    OneToOne.prototype = clone({
+        constructor: OneToOne,
+        _makeDefaultRelatedName: function() {
+            return this.store.getName();
+        },
+        setupReverseRelation: function() {
+            if (!this.store.getRegistry().has(this.relatedStore)) {
+                return;
+            }
+            if (this.relatedName in this.getRelatedStore().relations.oneToMany) {
+                return;
+            }
+            var relatedParams = {
+                field: this.relatedField,
+                relatedField: this.field,
+                relatedStore: this.store.getName(),
+                relatedName: this.name,
+                name: this.relatedName,
+                store: this.getRelatedStore(),
+                reverse: true
+            };
+            if ('onUpdate' in this) {
+                relatedParams['onUpdate'] = this['onUpdate'];
+            };
+            if ('onDelete' in this) {
+                relatedParams['onDelete'] = this['onDelete'];
+            };
+            this.getRelatedStore().relations.oneToMany[relatedParams.name] = new OneToOne(relatedParams);
+        }
+    }, Object.create(ForeignKey.prototype));
 
 
     function OneToMany(params) {
