@@ -724,6 +724,13 @@ function namespace(root) {
                     when(relatedStore.getLocalStore().update(relatedObj), resolve, reject);
                 }).iterate();
             });
+        },
+        unfoldRelatedQuery: function(relatedQuery) {
+            var relation = this;
+            return when(relation.getRelatedStore().find(relatedQuery), function(relatedQueryResult) {
+                // TODO: remove duplicates from orClause for case of o2m?
+                return relatedQueryResult.map(function(obj) { return relation.getQuery(obj); });
+            });
         }
     };
 
@@ -873,6 +880,12 @@ function namespace(root) {
                     );
                 }).iterate();
             });
+        },
+        unfoldRelatedQuery: function(relatedQuery) {
+            var relatedRelation = this.getRelatedStore().getRelation(this.relatedRelation);
+            var query = {};
+            query[relatedRelation.relatedName] = {'$rel': relatedQuery};
+            return this.store.getRelation(this.relation).unfoldRelatedQuery(query);  // Delegate to 'o2m'
         }
     }, Object.create(AbstractRelation.prototype));
 
@@ -1415,36 +1428,13 @@ function namespace(root) {
                     for (var opName in right) {
                         var relatedQuery = right[opName];
                         var relationName = left;
-                        if (relationName in owner._store.relations.foreignKey) {
-                            andClause.push(this._emulateRelation(owner, relationName, relatedQuery));
-                        } else if (relationName in owner._store.relations.oneToMany) {
-                            andClause.push(this._emulateRelation(owner, relationName, relatedQuery));
-                        } else if (relationName in owner._store.relations.manyToMany) {
-                            andClause.push(this._emulateM2mRelation(owner, relationName, relatedQuery));
-                        } else {
-                            throw Error('Unknown relation: ' + relationName);
-                        }
+                        var relation = owner._store.getRelation(relationName);
+                        andClause.push(when(relation.unfoldRelatedQuery(relatedQuery), function(orClause) {
+                            owner._subjects.push(orClause);
+                            return {'$or': orClause};
+                        }));
                     }
                     query['$and'] = andClause;
-                },
-                _emulateM2mRelation: function(owner, relationName, relatedQuery) {
-                    var m2mRelation = owner._store.relations.manyToMany[relationName];
-                    var relatedStore = m2mRelation.getRelatedStore();
-                    var relatedRelation = relatedStore.relations.oneToMany[m2mRelation.relatedRelation];
-                    var query = {};
-                    query[relatedRelation.relatedName] = {'$rel': relatedQuery};
-                    return this._emulateRelation(owner, m2mRelation.relation, query);  // 'o2m'
-                },
-                _emulateRelation: function(owner, relationName, relatedQuery) {
-                    var relation = owner._store.getRelation(relationName);
-                    var relatedStore = relation.getRelatedStore();
-                    var relatedQueryResult = relatedStore.find(relatedQuery);
-                    return when(relatedQueryResult, function(relatedQueryResult) {
-                        var orClause = relatedQueryResult.map(function(obj) { return relation.getQuery(obj); });
-                        // TODO: remove duplicates from orClause for case of o2m?
-                        owner._subjects.push(orClause);
-                        return {'$or': orClause};
-                    });
                 }
             }
         }),
