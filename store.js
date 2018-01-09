@@ -138,7 +138,7 @@ function namespace(root) {
             } else {
                 var pk = 'id';
             }
-            var remoteStore = pk instanceof Array ? new DummyStore(options) : new AutoIncrementStore(options);
+            var remoteStore = (pk instanceof Array) ? new DummyStore(options) : new AutoIncrementStore(options);
             this._remoteStore = withAspect(ObservableStoreAspect, remoteStore).init();
         }
 
@@ -457,8 +457,9 @@ function namespace(root) {
         getRequiredIndexes: function() {
             var indexes = __super__(RelationalStoreAspect, this).getRequiredIndexes.call(this).slice();
             if (!this._relations) { return indexes; } // Called from CompositeStore()
-            this.getRelations().forEach(function(relation) {
-                if (relation instanceof ManyToMany) { return; } // ManyToMany does not have own fields
+            this.getRelations().filter(function(relation) {
+                return !(relation instanceof ManyToMany); // ManyToMany does not have own fields
+            }).forEach(function(relation) {
                 relation.getField().forEach(function(field) {
                     if (indexes.indexOf(field) === -1) {
                         indexes.push(field);
@@ -501,13 +502,14 @@ function namespace(root) {
             var queue = [this];
             for (var i = 0; i < queue.length; i++) {
                 var store = queue[i];
-                for (var relationName in store.relations.foreignKey) {
-                    var relation = store.relations.foreignKey[relationName];
+                store.getRelations().filter(function(relation) {
+                    return relation.isDependent();
+                }).forEach(function(relation) {
                     var relatedStore = relation.getRelatedStore();
                     if (queue.indexOf(relatedStore) === -1) {
                         queue.push(relatedStore);
                     }
-                }
+                });
             }
             return queue;
         },
@@ -750,6 +752,9 @@ function namespace(root) {
                 }
                 return obj;
             });
+        },
+        isDependent: function() {
+            return false;
         }
     };
 
@@ -768,6 +773,9 @@ function namespace(root) {
         propagateBottomUp: AbstractRelation.prototype._propagate,
         checkReferentialIntegrityBottomUp: AbstractRelation.prototype._checkReferentialIntegrity,
         makeModelRelationGetter: AbstractRelation.prototype._makeModelRelatedObjectGetter,
+        isDependent: function() {
+            return true;
+        },
         setupReverseRelation: function() {
             if (!this.store.getRegistry().has(this.relatedStore)) {
                 return;
@@ -800,6 +808,7 @@ function namespace(root) {
         if (!this.reverse) {
             this.propagateBottomUp = this._propagate;
             this.checkReferentialIntegrityBottomUp = this._checkReferentialIntegrity;
+            this.isDependent = function() { return true; };
         } else {
             this.propagateTopDown = this._propagate;
             this.checkReferentialIntegrityTopDown = this._checkReferentialIntegrity;
