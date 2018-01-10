@@ -1642,7 +1642,6 @@ function namespace(root) {
             }), function(m2mRelation) {
                 var relatedStore = m2mRelation.getRelatedStore();
                 var relatedQueryResult = relatedStore.find(m2mRelation.getRelatedQuery(self._obj));
-                self._store.getObjectAccessor().setValue(self._obj, m2mRelation.name, relatedQueryResult);
                 return when(relatedQueryResult, function(relatedQueryResult) {
                     self._store.getObjectAccessor().setValue(self._obj, m2mRelation.name, relatedQueryResult);
                     return whenIter(relatedQueryResult, function(relatedObj) {
