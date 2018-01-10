@@ -1630,20 +1630,15 @@ function namespace(root) {
         },
         _handleOneToMany: function() {
             var self = this;
-            return whenIter(keys(this._store.relations.oneToMany), function(relationName) {
-                if (self._store.relationIsUsedByM2m(relationName)) {
-                    return;
-                }
-                if (!self._isRelationAllowed(relationName)) {
-                    return;
-                }
-                var relation = self._store.getRelation(relationName);
+            return whenIter(this._store.getRelations().filter(function(relation) {
+                return (relation instanceof OneToMany) && self._isRelationAllowed(relation.name)
+            }), function(relation) {
                 var relatedStore = relation.getRelatedStore();
                 var relatedQueryResult = relatedStore.find(relation.getRelatedQuery(self._obj));
                 return when(relatedQueryResult, function(relatedQueryResult) {
-                    self._store.getObjectAccessor().setValue(self._obj, relationName, relatedQueryResult);
+                    self._store.getObjectAccessor().setValue(self._obj, relation.name, relatedQueryResult);
                     return whenIter(relatedQueryResult, function(relatedObj) {
-                        return self._handleRelatedObj(relatedStore, relatedObj, self._delegateAllowedRelations(relationName));
+                        return self._handleRelatedObj(relatedStore, relatedObj, self._delegateAllowedRelations(relation.name));
                     });
                 });
             });
@@ -1654,18 +1649,16 @@ function namespace(root) {
         },
         _handleManyToMany: function() {
             var self = this;
-            return whenIter(keys(this._store.relations.manyToMany), function(relationName) {
-                if (!self._isRelationAllowed(relationName)) {
-                    return;
-                }
-                var m2mRelation = self._store.getRelation(relationName);
+            return whenIter(this._store.getRelations().filter(function(relation) {
+                return (relation instanceof ManyToMany) && self._isRelationAllowed(relation.name)
+            }), function(m2mRelation) {
                 var relatedStore = m2mRelation.getRelatedStore();
                 var relatedQueryResult = relatedStore.find(m2mRelation.getRelatedQuery(self._obj));
-                self._store.getObjectAccessor().setValue(self._obj, relationName, relatedQueryResult);
+                self._store.getObjectAccessor().setValue(self._obj, m2mRelation.name, relatedQueryResult);
                 return when(relatedQueryResult, function(relatedQueryResult) {
-                    self._store.getObjectAccessor().setValue(self._obj, relationName, relatedQueryResult);
+                    self._store.getObjectAccessor().setValue(self._obj, m2mRelation.name, relatedQueryResult);
                     return whenIter(relatedQueryResult, function(relatedObj) {
-                        return self._handleRelatedObj(relatedStore, relatedObj, self._delegateAllowedRelations(relationName));
+                        return self._handleRelatedObj(relatedStore, relatedObj, self._delegateAllowedRelations(m2mRelation.name));
                     });
                 });
             });
