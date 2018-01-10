@@ -1589,6 +1589,7 @@ function namespace(root) {
             if (this._state.isVisited(this._store, this._obj)) { return; }  // It's circular references. Skip it.
             this._state.visit(this._store, this._obj);
             return when(this._handleOneToMany(), function() {
+                // TODO: Add support for OneToOne
                 return when(self._handleManyToMany(), function() {
                     return self._obj;
                 });
