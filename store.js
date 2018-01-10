@@ -556,10 +556,11 @@ function namespace(root) {
             }
         },
         relationIsUsedByM2m: function(relationName) {
-            for (var m2mRelationName in this.relations.manyToMany) {
-                if (this.relations.manyToMany[m2mRelationName].relation === relationName) { return true; }
-            }
-            return false;
+            return !!this.getRelations().filter(function(relation) {
+                return relation instanceof ManyToMany;
+            }).filter(function(m2mRelation) {
+                return m2mRelation.relation === relationName;
+            }).length;
         },
         _initRelations: function(relations) {
             this.relations = relations ? relations : {};
