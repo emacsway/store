@@ -138,7 +138,7 @@ function namespace(root) {
             } else {
                 var pk = 'id';
             }
-            var remoteStore = pk instanceof Array ? new DummyStore(options) : new AutoIncrementStore(options);
+            var remoteStore = (pk instanceof Array) ? new DummyStore(options) : new AutoIncrementStore(options);
             this._remoteStore = withAspect(ObservableStoreAspect, remoteStore).init();
         }
 
@@ -412,53 +412,34 @@ function namespace(root) {
         },
         add:  function(obj, state) {
             var self = this;
-            return when(this._checkReferentialIntegrity(obj), function() {
+            return when(this._checkReferentialIntegrityBottomUp(obj), function() {
                 return __super__(PreObservableStoreAspect, self).add.call(self, obj);
             });
         },
         update:  function(obj, state) {
             var self = this;
-            return when(this._checkReferentialIntegrity(obj), function() {
+            return when(this._checkReferentialIntegrityBottomUp(obj), function() {
                 return __super__(PreObservableStoreAspect, self).update.call(self, obj);
             });
         },
         delete:  function(obj, state, remoteCascade) {
             var self = this;
-            return when(this._checkRelatedReferentialIntegrity(obj), function() {
+            return when(this._checkReferentialIntegrityTopDown(obj), function() {
                 return __super__(PreObservableStoreAspect, self).delete.call(self, obj, state, remoteCascade);
             });
         },
-        _checkReferentialIntegrity: function(obj) {
-            var self = this;
-            return whenIter(keys(this.relations.foreignKey), function(relationName) {
-                var relation = self.relations.foreignKey[relationName];
-                var relatedStore = relation.getRelatedStore();
-                var value = relation.getValue(obj);
-                var checkValue = value.filter(function(val) { return !!val; });
-                if (!checkValue.length) { return; }
-                return when(relatedStore.findList(relation.getRelatedQuery(obj)), function(relatedObjectList) {
-                    var relatedObj = relatedObjectList[0];
-                    if (typeof relatedObj === "undefined") {
-                        throw Error("Referential Integrity Error! Trying to add object with non-added relations!");
-                    }
-                    return obj;
-                });
+        _checkReferentialIntegrityBottomUp: function(obj) {
+            return whenIter(this.getRelations(), function(relation) {
+                return relation.checkReferentialIntegrityBottomUp(
+                    obj, "Referential Integrity Error! Trying to add object with non-added relations!"
+                );
             });
         },
-        _checkRelatedReferentialIntegrity: function(obj) {
-            var self = this;
-            return whenIter(keys(this.relations.oneToMany), function(relationName) {
-                var relation = self.relations.oneToMany[relationName];
-                var relatedStore = relation.getRelatedStore();
-                var value = relation.getValue(obj);
-                var checkValue = value.filter(function(val) { return !!val; });
-                if (!checkValue.length) { return; }
-                return when(relatedStore.findList(relation.getRelatedQuery(obj)), function(relatedObjectList) {
-                    if (relatedObjectList.length) {
-                        throw Error("Referential Integrity Error! Trying to delete object with non-deleted relations!");
-                    }
-                    return obj;
-                });
+        _checkReferentialIntegrityTopDown: function(obj) {
+            return whenIter(this.getRelations(), function(relation) {
+                return relation.checkReferentialIntegrityTopDown(
+                    obj, "Referential Integrity Error! Trying to delete object with non-deleted relations!"
+                );
             });
         }
     };
@@ -475,15 +456,16 @@ function namespace(root) {
         },
         getRequiredIndexes: function() {
             var indexes = __super__(RelationalStoreAspect, this).getRequiredIndexes.call(this).slice();
-            if (!this.relations) { return indexes; } // Called from CompositeStore()
-            for (var relationName in this.relations.foreignKey) {
-                var fields = this.relations.foreignKey[relationName].getField();
-                for (var i = 0; i < fields.length; i++) {
-                    if (indexes.indexOf(fields[i]) === -1) {
-                        indexes.push(fields[i]);
+            if (!this._relations) { return indexes; } // Called from CompositeStore()
+            this.getRelations().filter(function(relation) {
+                return !(relation instanceof ManyToMany); // ManyToMany does not have own fields
+            }).forEach(function(relation) {
+                relation.getField().forEach(function(field) {
+                    if (indexes.indexOf(field) === -1) {
+                        indexes.push(field);
                     }
-                }
-            }
+                });
+            });
             return indexes;
         },
         register: function(name, registry) {
@@ -520,13 +502,14 @@ function namespace(root) {
             var queue = [this];
             for (var i = 0; i < queue.length; i++) {
                 var store = queue[i];
-                for (var relationName in store.relations.foreignKey) {
-                    var relation = store.relations.foreignKey[relationName];
+                store.getRelations().filter(function(relation) {
+                    return relation.isDependent();
+                }).forEach(function(relation) {
                     var relatedStore = relation.getRelatedStore();
                     if (queue.indexOf(relatedStore) === -1) {
                         queue.push(relatedStore);
                     }
-                }
+                });
             }
             return queue;
         },
@@ -550,34 +533,37 @@ function namespace(root) {
             });
         },
         getRelation: function(name) {
-            for (var relationType in this.relations) {
-                if (name in this.relations[relationType]) {
-                    return this.relations[relationType][name];
-                }
-            }
+            return this._relations[name];
+        },
+        getRelations: function() {
+            return values(this._relations);
+        },
+        addRelation: function(name, relation) {
+            relation.name = name;
+            relation.store = this;
+            this._relations[name] = relation;
         },
         relationIsUsedByM2m: function(relationName) {
-            for (var m2mRelationName in this.relations.manyToMany) {
-                if (this.relations.manyToMany[m2mRelationName].relation === relationName) { return true; }
-            }
-            return false;
+            return !!this.getRelations().filter(function(relation) {
+                return relation instanceof ManyToMany;
+            }).filter(function(m2mRelation) {
+                return m2mRelation.relation === relationName;
+            }).length;
         },
         _initRelations: function(relations) {
-            this.relations = relations ? relations : {};
+            this._relations = {};
             var classMapping = {
                 foreignKey: ForeignKey,
+                oneToOne: OneToOne,
                 oneToMany: OneToMany,
                 manyToMany: ManyToMany
             };
-            for (var type in classMapping) {
-                if (!(type in this.relations)) {
-                    this.relations[type] = {};
+            for (var typeKey in classMapping) {
+                if (!(typeKey in relations)) {
+                    continue;
                 }
-                for (var name in this.relations[type]) {
-                    var params = this.relations[type][name];
-                    params['name'] = name;
-                    params['store'] = this;
-                    this.relations[type][name] = new classMapping[type](params);
+                for (var name in relations[typeKey]) {
+                    this.addRelation(name, new classMapping[typeKey](relations[typeKey][name]));
                 }
             }
         },
@@ -588,80 +574,24 @@ function namespace(root) {
             });
         },
         _syncRelations: function(obj, old) {
-            var self = this;
-            return new Iterator(keys(this.relations.oneToMany)).onEach(function(relationName, resolve, reject) {
-                var relation = self.relations.oneToMany[relationName];
-                var value = relation.getValue(obj);
-                var oldValue = relation.getValue(old);
-                if (!arrayEqual(value, oldValue)) {
-                    var relatedStore = relation.getRelatedStore();
-                    when(relatedStore.findList(relation.getRelatedQuery(old)), function(relatedObjectList) {
-                        new Iterator(relatedObjectList).onEach(function(relatedObj, resolve, reject) {
-                            relatedStore.getObjectAccessor().setValue(relatedObj, relation.getRelatedField(), value);
-                            when(relatedStore._localStore.update(relatedObj), resolve, reject);
-                        }).iterate().then(resolve, reject);
-                    });
-                }
+            return new Iterator(this.getRelations()).onEach(function(relation, resolve, reject) {
+                when(relation.syncRelatedObjects(obj, old), resolve, reject);
             }).iterate();
         },
         _setupReverseRelations: function(store) {
-            for (var relationName in store.relations.foreignKey) {
-                var relation = store.relations.foreignKey[relationName];
+            store.getRelations().forEach(function(relation) {
                 relation.setupReverseRelation();
-            }
+            });
         },
         _propagateTopDownRelations: function(onAction, obj, old, state) {
-            var self = this;
-            return new Iterator(keys(self.relations.oneToMany)).onEach(function(relationName, resolve, reject) {
-                self._propagateByRelation(onAction, obj, old, self.relations.oneToMany[relationName], state).then(resolve, reject);
-            }).iterate().then(function() {
-                return new Iterator(keys(self.relations.manyToMany)).onEach(function(relationName, resolve, reject) {
-                    self._propagateByM2m(onAction, obj, old, self.relations.manyToMany[relationName], state).then(resolve, reject);
-                }).iterate();
-            });
+            return new Iterator(this.getRelations()).onEach(function(relation, resolve, reject) {
+                when(relation.propagateTopDown(onAction, obj, old, state), resolve, reject);
+            }).iterate();
         },
         _propagateBottomUpRelations: function(onAction, obj, old, state) {
-            var self = this;
-            return new Iterator(keys(self.relations.foreignKey)).onEach(function(relationName, resolve, reject) {
-                self._propagateByRelation(onAction, obj, old, self.relations.foreignKey[relationName], state).then(resolve, reject);
-            }).iterate().then(function() {
-                return new Iterator(keys(self.relations.manyToMany)).onEach(function(relationName, resolve, reject) {
-                    self._propagateByM2m(onAction, obj, old, self.relations.manyToMany[relationName], state).then(resolve, reject);
-                }).iterate();
-            });
-        },
-        _propagateByRelation: function(onAction, obj, old, relation, state) {
-            if (!(onAction in relation)) {
-                return Promise.resolve();
-            }
-            var relatedStore = relation.getRelatedStore();
-            var query = relation.getRelatedQuery(obj);
-            return when(relatedStore.findList(query), function(relatedObjectList) {
-                return new Iterator(relatedObjectList).onEach(function(relatedObj, resolve, reject) {
-                    return new Iterator(toArray(relation[onAction])).onEach(function(action, resolve, reject) {
-                        action(relatedObj, obj, old, relation, state).then(resolve, reject);
-                    }).iterate().then(
-                        resolve, reject
-                    );
-                }).iterate();
-            });
-        },
-        _propagateByM2m: function(onAction, obj, old, m2mRelation, state) {
-            if (!(onAction in m2mRelation)) {
-                return;
-            }
-            var relatedStore = m2mRelation.getRelatedStore();
-            var relation = this.relations.oneToMany[m2mRelation.relation];
-            var query = m2mRelation.getRelatedQuery(obj);
-            return when(relatedStore.findList(query), function(relatedObjectList) {
-                return new Iterator(relatedObjectList).onEach(function(relatedObj, resolve, reject) {
-                    return new Iterator(toArray(m2mRelation[onAction])).onEach(function(action, resolve, reject) {
-                        action(relatedObj, obj, old, relation, state).then(resolve, reject);
-                    }).iterate().then(
-                        resolve, reject
-                    );
-                }).iterate();
-            });
+            return new Iterator(this.getRelations()).onEach(function(relation, resolve, reject) {
+                when(relation.propagateBottomUp(onAction, obj, old, state), resolve, reject);
+            }).iterate();
         }
     };
 
@@ -724,6 +654,95 @@ function namespace(root) {
         },
         getRelatedRelation: function() {
             return this.getRelatedStore().getRelation(this.relatedName);
+        },
+        propagateTopDown: function(onAction, obj, old, state) {
+            return Promise.resolve();
+        },
+        propagateBottomUp: function(onAction, obj, old, state) {
+            return Promise.resolve();
+        },
+        _propagate: function(onAction, obj, old, state) {
+            var relation = this;
+            if (!(onAction in this)) {
+                return Promise.resolve();
+            }
+            var relatedStore = relation.getRelatedStore();
+            var query = relation.getRelatedQuery(obj);
+            return when(relatedStore.findList(query), function(relatedObjectList) {
+                return new Iterator(relatedObjectList).onEach(function(relatedObj, resolve, reject) {
+                    return new Iterator(toArray(relation[onAction])).onEach(function(action, resolve, reject) {
+                        action(relatedObj, obj, old, relation, state).then(resolve, reject);
+                    }).iterate().then(
+                        resolve, reject
+                    );
+                }).iterate();
+            });
+        },
+        syncRelatedObjects: function(obj, old) {
+            return Promise.resolve();
+        },
+        _syncRelatedObjects: function(obj, old) {
+            var relation = this;
+            var value = this.getValue(obj);
+            var oldValue = this.getValue(old);
+            if (arrayEqual(value, oldValue)) {
+                return Promise.resolve();
+            }
+            var relatedStore = this.getRelatedStore();
+            return when(relatedStore.findList(this.getRelatedQuery(old)), function(relatedObjectList) {
+                new Iterator(relatedObjectList).onEach(function(relatedObj, resolve, reject) {
+                    relatedStore.getObjectAccessor().setValue(relatedObj, relation.getRelatedField(), value);
+                    when(relatedStore.getLocalStore().update(relatedObj), resolve, reject);
+                }).iterate();
+            });
+        },
+        unfoldRelatedQuery: function(relatedQuery) {
+            var relation = this;
+            return when(relation.getRelatedStore().find(relatedQuery), function(relatedQueryResult) {
+                // TODO: remove duplicates from orClause for case of o2m?
+                return relatedQueryResult.map(function(obj) { return relation.getQuery(obj); });
+            });
+        },
+        _makeModelRelatedObjectGetter: function() {
+            var relation = this;
+            return function() {
+                var obj = this;
+                var relatedStore = relation.getRelatedStore();
+                var finalQuery = relation.getRelatedQuery(obj);
+                return relatedStore.get(finalQuery);
+            };
+        },
+        _makeModelRelatedObjectCollectionGetter: function() {
+            var relation = this;
+            return function(query) {
+                var obj = this;
+                var relatedStore = relation.getRelatedStore();
+                var finalQuery = relation.getRelatedQuery(obj);
+                clone(query, finalQuery);
+                return relatedStore.find(finalQuery);
+            };
+        },
+        checkReferentialIntegrityBottomUp: function(obj, errorMessage) {
+            return obj;
+        },
+        checkReferentialIntegrityTopDown: function(obj, errorMessage) {
+            return obj;
+        },
+        _checkReferentialIntegrity: function(obj, errorMessage) {
+            var relation = this;
+            var relatedStore = relation.getRelatedStore();
+            var value = relation.getValue(obj);
+            var checkValue = value.filter(function(val) { return !!val; });
+            if (!checkValue.length) { return; }
+            return when(relatedStore.findList(relation.getRelatedQuery(obj)), function(relatedObjectList) {
+                if (relatedObjectList.length) {
+                    throw Error(errorMessage || "Referential Integrity Error!");
+                }
+                return obj;
+            });
+        },
+        isDependent: function() {
+            return false;
         }
     };
 
@@ -731,25 +750,32 @@ function namespace(root) {
     function ForeignKey(params) {
         AbstractRelation.call(this, params);
         if (!this.relatedName) {
-            this.relatedName = this.store.getName() + 'Set';
+            this.relatedName = this._makeDefaultRelatedName();
         }
     }
     ForeignKey.prototype = clone({
         constructor: ForeignKey,
+        _makeDefaultRelatedName: function() {
+            return this.store.getName() + 'Set';
+        },
+        propagateBottomUp: AbstractRelation.prototype._propagate,
+        checkReferentialIntegrityBottomUp: AbstractRelation.prototype._checkReferentialIntegrity,
+        makeModelRelationGetter: AbstractRelation.prototype._makeModelRelatedObjectGetter,
+        isDependent: function() {
+            return true;
+        },
         setupReverseRelation: function() {
             if (!this.store.getRegistry().has(this.relatedStore)) {
                 return;
             }
-            if (this.relatedName in this.getRelatedStore().relations.oneToMany) {
+            if (this.getRelatedStore().getRelation(this.relatedName)) {
                 return;
             }
             var relatedParams = {
                 field: this.relatedField,
                 relatedField: this.field,
                 relatedStore: this.store.getName(),
-                relatedName: this.name,
-                name: this.relatedName,
-                store: this.getRelatedStore()
+                relatedName: this.name
             };
             if ('onUpdate' in this) {
                 relatedParams['onUpdate'] = this['onUpdate'];
@@ -757,7 +783,53 @@ function namespace(root) {
             if ('onDelete' in this) {
                 relatedParams['onDelete'] = this['onDelete'];
             };
-            this.getRelatedStore().relations.oneToMany[relatedParams.name] = new OneToMany(relatedParams);
+            this.getRelatedStore().addRelation(this.relatedName, new OneToMany(relatedParams));
+        }
+    }, Object.create(AbstractRelation.prototype));
+
+
+    function OneToOne(params) {
+        AbstractRelation.call(this, params);
+        if (!this.relatedName) {
+            this.relatedName = this._makeDefaultRelatedName();
+        }
+        if (!this.reverse) {
+            this.propagateBottomUp = this._propagate;
+            this.checkReferentialIntegrityBottomUp = this._checkReferentialIntegrity;
+            this.isDependent = function() { return true; };
+        } else {
+            this.propagateTopDown = this._propagate;
+            this.checkReferentialIntegrityTopDown = this._checkReferentialIntegrity;
+            this.syncRelatedObjects = this._syncRelatedObjects;
+        }
+    }
+    OneToOne.prototype = clone({
+        constructor: OneToOne,
+        _makeDefaultRelatedName: function() {
+            return this.store.getName();
+        },
+        makeModelRelationGetter: AbstractRelation.prototype._makeModelRelatedObjectGetter,
+        setupReverseRelation: function() {
+            if (!this.store.getRegistry().has(this.relatedStore)) {
+                return;
+            }
+            if (this.getRelatedStore().getRelation(this.relatedName)) {
+                return;
+            }
+            var relatedParams = {
+                field: this.relatedField,
+                relatedField: this.field,
+                relatedStore: this.store.getName(),
+                relatedName: this.name,
+                reverse: !this.reverse
+            };
+            if ('onUpdate' in this) {
+                relatedParams['onUpdate'] = this['onUpdate'];
+            };
+            if ('onDelete' in this) {
+                relatedParams['onDelete'] = this['onDelete'];
+            };
+            this.getRelatedStore().addRelation(this.relatedName, new OneToOne(relatedParams));
         }
     }, Object.create(AbstractRelation.prototype));
 
@@ -766,20 +838,29 @@ function namespace(root) {
         AbstractRelation.call(this, params);
     }
     OneToMany.prototype = clone({
-        constructor: OneToMany
+        constructor: OneToMany,
+        propagateTopDown: AbstractRelation.prototype._propagate,
+        checkReferentialIntegrityTopDown: AbstractRelation.prototype._checkReferentialIntegrity,
+        syncRelatedObjects: AbstractRelation.prototype._syncRelatedObjects,
+        makeModelRelationGetter: AbstractRelation.prototype._makeModelRelatedObjectCollectionGetter
     }, Object.create(AbstractRelation.prototype));
 
 
     function ManyToMany(params) {
         AbstractRelation.call(this, params);
+        if (!this.reverse) {
+            this.propagateBottomUp = this._propagate;
+        } else {
+            this.propagateTopDown = this._propagate;
+        }
     }
     ManyToMany.prototype = clone({
         constructor: ManyToMany,
         getField: function() {
-            return this.store.relations.oneToMany[this.relation].getField();
+            return this.store.getRelation(this.relation).getField();
         },
         getRelatedField: function() {
-            return this.getRelatedStore().relations.oneToMany[this.relatedRelation].getField();
+            return this.getRelatedStore().getRelation(this.relatedRelation).getField();
         },
         getQuery: function(relatedObj) {
             var query = {},
@@ -807,7 +888,31 @@ function namespace(root) {
             return query;
         },
         getRelatedRelation: function() {
-            return;
+        },
+        makeModelRelationGetter: AbstractRelation.prototype._makeModelRelatedObjectCollectionGetter,
+        _propagate: function(onAction, obj, old, state) {
+            var m2mRelation = this;
+            if (!(onAction in m2mRelation)) {
+                return;
+            }
+            var relatedStore = m2mRelation.getRelatedStore();
+            var relation = this.store.getRelation(m2mRelation.relation);
+            var query = m2mRelation.getRelatedQuery(obj);
+            return when(relatedStore.findList(query), function(relatedObjectList) {
+                return new Iterator(relatedObjectList).onEach(function(relatedObj, resolve, reject) {
+                    return new Iterator(toArray(m2mRelation[onAction])).onEach(function(action, resolve, reject) {
+                        action(relatedObj, obj, old, relation, state).then(resolve, reject);
+                    }).iterate().then(
+                        resolve, reject
+                    );
+                }).iterate();
+            });
+        },
+        unfoldRelatedQuery: function(relatedQuery) {
+            var relatedRelation = this.getRelatedStore().getRelation(this.relatedRelation);
+            var query = {};
+            query[relatedRelation.relatedName] = {'$rel': relatedQuery};
+            return this.store.getRelation(this.relation).unfoldRelatedQuery(query);  // Delegate to 'o2m'
         }
     }, Object.create(AbstractRelation.prototype));
 
@@ -1350,36 +1455,13 @@ function namespace(root) {
                     for (var opName in right) {
                         var relatedQuery = right[opName];
                         var relationName = left;
-                        if (relationName in owner._store.relations.foreignKey) {
-                            andClause.push(this._emulateRelation(owner, relationName, relatedQuery));
-                        } else if (relationName in owner._store.relations.oneToMany) {
-                            andClause.push(this._emulateRelation(owner, relationName, relatedQuery));
-                        } else if (relationName in owner._store.relations.manyToMany) {
-                            andClause.push(this._emulateM2mRelation(owner, relationName, relatedQuery));
-                        } else {
-                            throw Error('Unknown relation: ' + relationName);
-                        }
+                        var relation = owner._store.getRelation(relationName);
+                        andClause.push(when(relation.unfoldRelatedQuery(relatedQuery), function(orClause) {
+                            owner._subjects.push(orClause);
+                            return {'$or': orClause};
+                        }));
                     }
                     query['$and'] = andClause;
-                },
-                _emulateM2mRelation: function(owner, relationName, relatedQuery) {
-                    var m2mRelation = owner._store.relations.manyToMany[relationName];
-                    var relatedStore = m2mRelation.getRelatedStore();
-                    var relatedRelation = relatedStore.relations.oneToMany[m2mRelation.relatedRelation];
-                    var query = {};
-                    query[relatedRelation.relatedName] = {'$rel': relatedQuery};
-                    return this._emulateRelation(owner, m2mRelation.relation, query);  // 'o2m'
-                },
-                _emulateRelation: function(owner, relationName, relatedQuery) {
-                    var relation = owner._store.getRelation(relationName);
-                    var relatedStore = relation.getRelatedStore();
-                    var relatedQueryResult = relatedStore.find(relatedQuery);
-                    return when(relatedQueryResult, function(relatedQueryResult) {
-                        var orClause = relatedQueryResult.map(function(obj) { return relation.getQuery(obj); });
-                        // TODO: remove duplicates from orClause for case of o2m?
-                        owner._subjects.push(orClause);
-                        return {'$or': orClause};
-                    });
                 }
             }
         }),
@@ -1507,6 +1589,7 @@ function namespace(root) {
             if (this._state.isVisited(this._store, this._obj)) { return; }  // It's circular references. Skip it.
             this._state.visit(this._store, this._obj);
             return when(this._handleOneToMany(), function() {
+                // TODO: Add support for OneToOne
                 return when(self._handleManyToMany(), function() {
                     return self._obj;
                 });
@@ -1535,20 +1618,15 @@ function namespace(root) {
         },
         _handleOneToMany: function() {
             var self = this;
-            return whenIter(keys(this._store.relations.oneToMany), function(relationName) {
-                if (self._store.relationIsUsedByM2m(relationName)) {
-                    return;
-                }
-                if (!self._isRelationAllowed(relationName)) {
-                    return;
-                }
-                var relation = self._store.relations.oneToMany[relationName];
+            return whenIter(this._store.getRelations().filter(function(relation) {
+                return (relation instanceof OneToMany) && self._isRelationAllowed(relation.name)
+            }), function(relation) {
                 var relatedStore = relation.getRelatedStore();
                 var relatedQueryResult = relatedStore.find(relation.getRelatedQuery(self._obj));
                 return when(relatedQueryResult, function(relatedQueryResult) {
-                    self._store.getObjectAccessor().setValue(self._obj, relationName, relatedQueryResult);
+                    self._store.getObjectAccessor().setValue(self._obj, relation.name, relatedQueryResult);
                     return whenIter(relatedQueryResult, function(relatedObj) {
-                        return self._handleRelatedObj(relatedStore, relatedObj, self._delegateAllowedRelations(relationName));
+                        return self._handleRelatedObj(relatedStore, relatedObj, self._delegateAllowedRelations(relation.name));
                     });
                 });
             });
@@ -1559,18 +1637,16 @@ function namespace(root) {
         },
         _handleManyToMany: function() {
             var self = this;
-            return whenIter(keys(this._store.relations.manyToMany), function(relationName) {
-                if (!self._isRelationAllowed(relationName)) {
-                    return;
-                }
-                var m2mRelation = self._store.relations.manyToMany[relationName];
+            return whenIter(this._store.getRelations().filter(function(relation) {
+                return (relation instanceof ManyToMany) && self._isRelationAllowed(relation.name)
+            }), function(m2mRelation) {
                 var relatedStore = m2mRelation.getRelatedStore();
                 var relatedQueryResult = relatedStore.find(m2mRelation.getRelatedQuery(self._obj));
-                self._store.getObjectAccessor().setValue(self._obj, relationName, relatedQueryResult);
+                self._store.getObjectAccessor().setValue(self._obj, m2mRelation.name, relatedQueryResult);
                 return when(relatedQueryResult, function(relatedQueryResult) {
-                    self._store.getObjectAccessor().setValue(self._obj, relationName, relatedQueryResult);
+                    self._store.getObjectAccessor().setValue(self._obj, m2mRelation.name, relatedQueryResult);
                     return whenIter(relatedQueryResult, function(relatedObj) {
-                        return self._handleRelatedObj(relatedStore, relatedObj, self._delegateAllowedRelations(relationName));
+                        return self._handleRelatedObj(relatedStore, relatedObj, self._delegateAllowedRelations(m2mRelation.name));
                     });
                 });
             });
@@ -1605,6 +1681,7 @@ function namespace(root) {
                     return when(obj, function(obj) {
                         self._obj = obj;
                         return when(self._handleOneToMany(), function() {
+                            // TODO: Add support for OneToOne
                             return when(self._handleManyToMany(), function() {
                                 return self._obj;
                             });
@@ -1615,27 +1692,26 @@ function namespace(root) {
         },
         _handleForeignKey: function() {
             var self = this;
-            return whenIter(keys(this._store.relations.foreignKey), function(relationName) {
-                var relation = self._store.relations.foreignKey[relationName];
+            return whenIter(this._store.getRelations().filter(function(relation) {
+                return relation instanceof ForeignKey;
+            }), function(relation) {
                 var relatedStore = relation.getRelatedStore();
-                var relatedObj = self._store.getObjectAccessor().getValue(self._obj, relationName);
+                var relatedObj = self._store.getObjectAccessor().getValue(self._obj, relation.name);
                 if (relatedObj && typeof relatedObj === "object") {
                     self._setForeignKeyToRelatedObj(relatedObj, relation.getRelatedRelation(), self._obj);
                     return when(self._handleRelatedObj(relatedStore, relatedObj), function(relatedObj) {
-                        self._store.getObjectAccessor().setValue(self._obj, relationName, relatedObj);
+                        self._store.getObjectAccessor().setValue(self._obj, relation.name, relatedObj);
                     });
                 }
             });
         },
         _handleOneToMany: function() {
             var self = this;
-            return whenIter(keys(this._store.relations.oneToMany), function(relationName) {
-                if (self._store.relationIsUsedByM2m(relationName)) {
-                    return;
-                }
-                var relation = self._store.relations.oneToMany[relationName];
+            return whenIter(this._store.getRelations().filter(function(relation) {
+                return (relation instanceof OneToMany) && !self._store.relationIsUsedByM2m(relation.name);
+            }), function(relation) {
                 var relatedStore = relation.getRelatedStore();
-                var newRelatedObjectList = self._store.getObjectAccessor().getValue(self._obj, relationName) || [];
+                var newRelatedObjectList = self._store.getObjectAccessor().getValue(self._obj, relation.name) || [];
                 // When we add an aggregate to a single endpoint,
                 // the all child of the aggregate in the memory don't have PK,
                 // thus, we have to associate child manually based on their order.
@@ -1646,7 +1722,7 @@ function namespace(root) {
                 // So, we don't have to sync aggregate here, but we have to set at least PK and default values.
                 // We assume that concurrent transaction can't to delete any item of aggregate because of
                 // optimistic offline lock for whole aggregate (the root of aggregate).
-                var oldRelatedObjectList = self._previousState[relationName] || [];
+                var oldRelatedObjectList = self._previousState[relation.name] || [];
                 if (!oldRelatedObjectList.length) {
                     oldRelatedObjectList = relatedStore.findList(relation.getRelatedQuery(self._obj));
                 }
@@ -1675,10 +1751,11 @@ function namespace(root) {
         },
         _handleManyToMany: function() {
             var self = this;
-            return whenIter(keys(this._store.relations.manyToMany), function(relationName) {
-                var m2mRelation = self._store.relations.manyToMany[relationName];
+            return whenIter(this._store.getRelations().filter(function(relation) {
+                return relation instanceof ManyToMany;
+            }), function(m2mRelation) {
                 var relatedStore = m2mRelation.getRelatedStore();
-                var relatedObjectList = self._store.getObjectAccessor().getValue(self._obj, relationName) || [];
+                var relatedObjectList = self._store.getObjectAccessor().getValue(self._obj, m2mRelation.name) || [];
                 return whenIter(relatedObjectList, function(relatedObj, i) {
                     return when(self._handleRelatedObj(relatedStore, relatedObj), function(relatedObj) {
                         relatedObjectList[i] = relatedObj;
@@ -1688,10 +1765,10 @@ function namespace(root) {
             });
         },
         _addManyToManyRelation: function(m2mRelation, relatedObj) {
-            var relation = this._store.relations.oneToMany[m2mRelation.relation];
+            var relation = this._store.getRelation(m2mRelation.relation);
             var m2mStore = relation.getRelatedStore();
             var relatedStore = m2mRelation.getRelatedStore();
-            var relatedRelation = relatedStore.relations.oneToMany[m2mRelation.relatedRelation];
+            var relatedRelation = relatedStore.getRelation(m2mRelation.relatedRelation);
             var value = relation.getValue(this._obj);
             var relatedValue = relatedRelation.getValue(relatedObj);
 
@@ -2531,12 +2608,9 @@ function namespace(root) {
 
     function RelationalAccessorModelAspectFactory(getterNameFactory) {
         var factory = this;
-        this._getterNameFactory = getterNameFactory || function(relationName) {
-            return ('get' + relationName.charAt(0).toUpperCase() +
-                    relationName.slice(1).replace(/[_-]([a-z])/g, function (g) {
-                        return g[1].toUpperCase();
-                    }));
-        };
+        if (getterNameFactory) {
+            this._makeGetterName = getterNameFactory;
+        }
         this._aspect = {
             init: function(storeAccessor) {
                 factory.initAspect(this, storeAccessor());
@@ -2548,48 +2622,17 @@ function namespace(root) {
         compute: function() {
             return this._aspect;
         },
+        _makeGetterName: function(relationName) {
+            return ('get' + relationName.charAt(0).toUpperCase() +
+                    relationName.slice(1).replace(/[_-]([a-z])/g, function (g) {
+                        return g[1].toUpperCase();
+                    }));
+        },
         initAspect: function(aspect, store) {
-            this._handleForeignKey(aspect, store);
-            this._handleOneToMany(aspect, store);
-            this._handleManyToMany(aspect, store);
-        },
-        _handleForeignKey: function(aspect, store) {
             var self = this;
-            keys(store.relations.foreignKey).forEach(function(relationName) {
-                var relation = store.relations.foreignKey[relationName];
-                aspect[self._getterNameFactory(relationName)] = self._makeObjectGetter(relation);
+            store.getRelations().forEach(function(relation) {
+                aspect[self._makeGetterName(relation.name)] = relation.makeModelRelationGetter();
             });
-        },
-        _handleOneToMany: function(aspect, store) {
-            var self = this;
-            keys(store.relations.oneToMany).forEach(function(relationName) {
-                var relation = store.relations.oneToMany[relationName];
-                aspect[self._getterNameFactory(relationName)] = self._makeCollectionGetter(relation);
-            });
-        },
-        _handleManyToMany: function(aspect, store) {
-            var self = this;
-            keys(store.relations.manyToMany).forEach(function(relationName) {
-                var relation = store.relations.oneToMany[relationName];
-                aspect[self._getterNameFactory(relationName)] = self._makeCollectionGetter(relation);
-            });
-        },
-        _makeCollectionGetter: function(relation) {
-            return function(query) {
-                var obj = this;
-                var relatedStore = relation.getRelatedStore();
-                var finalQuery = relation.getRelatedQuery(obj);
-                clone(query, finalQuery);
-                return relatedStore.find(finalQuery);
-            };
-        },
-        _makeObjectGetter: function(relation) {
-            return function() {
-                var obj = this;
-                var relatedStore = relation.getRelatedStore();
-                var finalQuery = relation.getRelatedQuery(obj);
-                return relatedStore.get(finalQuery);
-            };
         }
     };
 
@@ -3433,6 +3476,16 @@ function namespace(root) {
         for (var i in obj) {
             if (!obj.hasOwnProperty(i)) { continue };
             r.push(i);
+        }
+        return r;
+    }
+
+
+    function values(obj) {
+        var r = [];
+        for (var i in obj) {
+            if (!obj.hasOwnProperty(i)) { continue };
+            r.push(obj[i]);
         }
         return r;
     }
