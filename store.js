@@ -1588,12 +1588,29 @@ function namespace(root) {
             var self = this;
             if (this._state.isVisited(this._store, this._obj)) { return; }  // It's circular references. Skip it.
             this._state.visit(this._store, this._obj);
-            return when(this._handleOneToMany(), function() {
+            return when(this._handleRelations(), function() {
+                return self._obj;
+            });
+        },
+        _handleRelations: function() {
+            var self = this;
+            return whenIter(this._store.getRelations().filter(function(relation) {
                 // TODO: Add support for OneToOne
-                return when(self._handleManyToMany(), function() {
-                    return self._obj;
+                return ((relation instanceof OneToMany) || (relation instanceof ManyToMany)) && self._isRelationAllowed(relation.name);
+            }), function(relation) {
+                var relatedStore = relation.getRelatedStore();
+                var relatedQueryResult = relatedStore.find(relation.getRelatedQuery(self._obj));
+                return when(relatedQueryResult, function(relatedQueryResult) {
+                    self._store.getObjectAccessor().setValue(self._obj, relation.name, relatedQueryResult);
+                    return whenIter(relatedQueryResult, function(relatedObj) {
+                        return self._handleRelatedObj(relatedStore, relatedObj, self._delegateAllowedRelations(relation.name));
+                    });
                 });
             });
+        },
+        _handleRelatedObj: function(relatedStore, relatedObj, allowedRelations) {
+            return relatedStore.compose(relatedObj, allowedRelations, this._state);
+
         },
         _isRelationAllowed: function(relationName) {
             if (!this._allowedRelations.length) {
@@ -1615,40 +1632,6 @@ function namespace(root) {
                 }
             }
             return result;
-        },
-        _handleOneToMany: function() {
-            var self = this;
-            return whenIter(this._store.getRelations().filter(function(relation) {
-                return (relation instanceof OneToMany) && self._isRelationAllowed(relation.name)
-            }), function(relation) {
-                var relatedStore = relation.getRelatedStore();
-                var relatedQueryResult = relatedStore.find(relation.getRelatedQuery(self._obj));
-                return when(relatedQueryResult, function(relatedQueryResult) {
-                    self._store.getObjectAccessor().setValue(self._obj, relation.name, relatedQueryResult);
-                    return whenIter(relatedQueryResult, function(relatedObj) {
-                        return self._handleRelatedObj(relatedStore, relatedObj, self._delegateAllowedRelations(relation.name));
-                    });
-                });
-            });
-        },
-        _handleRelatedObj: function(relatedStore, relatedObj, allowedRelations) {
-            return relatedStore.compose(relatedObj, allowedRelations, this._state);
-
-        },
-        _handleManyToMany: function() {
-            var self = this;
-            return whenIter(this._store.getRelations().filter(function(relation) {
-                return (relation instanceof ManyToMany) && self._isRelationAllowed(relation.name)
-            }), function(m2mRelation) {
-                var relatedStore = m2mRelation.getRelatedStore();
-                var relatedQueryResult = relatedStore.find(m2mRelation.getRelatedQuery(self._obj));
-                return when(relatedQueryResult, function(relatedQueryResult) {
-                    self._store.getObjectAccessor().setValue(self._obj, m2mRelation.name, relatedQueryResult);
-                    return whenIter(relatedQueryResult, function(relatedObj) {
-                        return self._handleRelatedObj(relatedStore, relatedObj, self._delegateAllowedRelations(m2mRelation.name));
-                    });
-                });
-            });
         }
     };
 
