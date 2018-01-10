@@ -1595,7 +1595,6 @@ function namespace(root) {
         _handleRelations: function() {
             var self = this;
             return whenIter(this._store.getRelations().filter(function(relation) {
-                // TODO: Add support for OneToOne
                 return !relation.isDependent() && self._isRelationAllowed(relation.name);
             }).filter(function(relation) {
                 return !(relation instanceof OneToMany && self._store.relationIsUsedByM2m(relation.name));
