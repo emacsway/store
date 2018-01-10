@@ -1596,17 +1596,28 @@ function namespace(root) {
             var self = this;
             return whenIter(this._store.getRelations().filter(function(relation) {
                 // TODO: Add support for OneToOne
-                return ((relation instanceof OneToMany) || (relation instanceof ManyToMany)) && self._isRelationAllowed(relation.name);
+                return !relation.isDependent() && self._isRelationAllowed(relation.name);
+            }).filter(function(relation) {
+                return !(relation instanceof OneToMany && self._store.relationIsUsedByM2m(relation.name));
             }), function(relation) {
                 var relatedStore = relation.getRelatedStore();
                 var relatedQueryResult = relatedStore.find(relation.getRelatedQuery(self._obj));
                 return when(relatedQueryResult, function(relatedQueryResult) {
-                    self._store.getObjectAccessor().setValue(self._obj, relation.name, relatedQueryResult);
+                    self._setObjectValue(relation, relatedQueryResult);
                     return whenIter(relatedQueryResult, function(relatedObj) {
                         return self._handleRelatedObj(relatedStore, relatedObj, self._delegateAllowedRelations(relation.name));
                     });
                 });
             });
+        },
+        _setObjectValue: function(relation, relatedQueryResult) {
+            if (relation instanceof OneToOne || relation instanceof ForeignKey) {
+                this._store.getObjectAccessor().setValue(this._obj, relation.name, relatedQueryResult[0]);
+            } else if (relation instanceof OneToMany || relation instanceof ManyToMany){
+                this._store.getObjectAccessor().setValue(this._obj, relation.name, relatedQueryResult);
+            } else {
+                throw Error("Unknown relation type!");
+            }
         },
         _handleRelatedObj: function(relatedStore, relatedObj, allowedRelations) {
             return relatedStore.compose(relatedObj, allowedRelations, this._state);
