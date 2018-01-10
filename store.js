@@ -1612,6 +1612,10 @@ function namespace(root) {
                 });
             });
         },
+        _handleRelatedObj: function(relatedStore, relatedObj, allowedRelations) {
+            return relatedStore.compose(relatedObj, allowedRelations, this._state);
+
+        },
         _setObjectRelation: function(relation, relatedQueryResult) {
             if (relation instanceof OneToOne || relation instanceof ForeignKey) {
                 this._store.getObjectAccessor().setValue(this._obj, relation.name, relatedQueryResult[0]);
@@ -1620,10 +1624,6 @@ function namespace(root) {
             } else {
                 throw Error("Unknown relation type!");
             }
-        },
-        _handleRelatedObj: function(relatedStore, relatedObj, allowedRelations) {
-            return relatedStore.compose(relatedObj, allowedRelations, this._state);
-
         },
         _isRelationAllowed: function(relationName) {
             if (!this._allowedRelations.length) {
@@ -1717,8 +1717,8 @@ function namespace(root) {
                     if (!oldRelatedObject) {
                         oldRelatedObject = relatedStore.get(relation.getRelatedQuery(self._obj));
                     }
+                    self._setForeignKeyToRelatedObj(self._obj, relation, relatedObj);
                     return when(self._handleRelatedObj(relatedStore, relatedObj, oldRelatedObject), function(relatedObj) {
-                        self._setForeignKeyToRelatedObj(self._obj, relation, relatedObj);
                         self._store.getObjectAccessor().setValue(self._obj, relation.name, relatedObj);
                     });
                 }
@@ -1754,20 +1754,6 @@ function namespace(root) {
                 });
             });
         },
-        _setForeignKeyToRelatedObj: function(obj, relation, relatedObj) {
-            var value = relation.getValue(obj);
-            var relatedField = relation.getRelatedField();
-            for (var i = 0; i < relatedField.length; i++) {
-                if (typeof relation.getRelatedStore().getObjectAccessor().getValue(relatedObj, relatedField[i]) === "undefined") {
-                    relation.getRelatedStore().getObjectAccessor().setValue(relatedObj, relatedField[i], value[i]);
-                } else if (relation.getRelatedStore().getObjectAccessor().getValue(relatedObj, relatedField[i]) !== value[i]) {
-                    throw Error("Incorrect value of Foreigh Key!");
-                }
-            }
-        },
-        _handleRelatedObj: function(relatedStore, relatedObj, associatedRelatedObj) {
-            return relatedStore.decompose(relatedObj, associatedRelatedObj);
-        },
         _handleManyToMany: function() {
             var self = this;
             return whenIter(this._store.getRelations().filter(function(relation) {
@@ -1786,6 +1772,20 @@ function namespace(root) {
                     });
                 });
             });
+        },
+        _handleRelatedObj: function(relatedStore, relatedObj, associatedRelatedObj) {
+            return relatedStore.decompose(relatedObj, associatedRelatedObj);
+        },
+        _setForeignKeyToRelatedObj: function(obj, relation, relatedObj) {
+            var value = relation.getValue(obj);
+            var relatedField = relation.getRelatedField();
+            for (var i = 0; i < relatedField.length; i++) {
+                if (typeof relation.getRelatedStore().getObjectAccessor().getValue(relatedObj, relatedField[i]) === "undefined") {
+                    relation.getRelatedStore().getObjectAccessor().setValue(relatedObj, relatedField[i], value[i]);
+                } else if (relation.getRelatedStore().getObjectAccessor().getValue(relatedObj, relatedField[i]) !== value[i]) {
+                    throw Error("Incorrect value of Foreigh Key!");
+                }
+            }
         },
         _addManyToManyRelation: function(m2mRelation, relatedObj) {
             var relation = this._store.getRelation(m2mRelation.relation);
