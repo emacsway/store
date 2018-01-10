@@ -653,6 +653,8 @@ function namespace(root) {
             return this.store.getRegistry().get(this.relatedStore);
         },
         getRelatedRelation: function() {
+            // Be aware with using of this method!
+            // The relation can be unidirectional!
             return this.getRelatedStore().getRelation(this.relatedName);
         },
         propagateTopDown: function(onAction, obj, old, state) {
@@ -1694,11 +1696,8 @@ function namespace(root) {
                 var relatedStore = relation.getRelatedStore();
                 var relatedObj = self._store.getObjectAccessor().getValue(self._obj, relation.name);
                 if (relatedObj && typeof relatedObj === "object") {
-                    var oldRelatedObject = self._previousState[relation.name];
-                    if (!oldRelatedObject) {
-                        oldRelatedObject = relatedStore.get(relation.getRelatedQuery(self._obj));
-                    }
-                    self._setForeignKeyToRelatedObj(relatedObj, relation.getRelatedRelation(), self._obj);
+                    var oldRelatedObject = self._getOldRelatedObject(relation);
+                    self._setForeignKeyValueFromRelatedObject(relation, relatedObj);
                     return when(self._handleRelatedObj(relatedStore, relatedObj, oldRelatedObject), function(relatedObj) {
                         self._store.getObjectAccessor().setValue(self._obj, relation.name, relatedObj);
                     });
@@ -1713,11 +1712,8 @@ function namespace(root) {
                 var relatedStore = relation.getRelatedStore();
                 var relatedObj = self._store.getObjectAccessor().getValue(self._obj, relation.name);
                 if (relatedObj && typeof relatedObj === "object") {
-                    var oldRelatedObject = self._previousState[relation.name];
-                    if (!oldRelatedObject) {
-                        oldRelatedObject = relatedStore.get(relation.getRelatedQuery(self._obj));
-                    }
-                    self._setForeignKeyToRelatedObj(self._obj, relation, relatedObj);
+                    var oldRelatedObject = self._getOldRelatedObject(relation);
+                    self._setForeignKeyValueToRelatedObject(relation, relatedObj);
                     return when(self._handleRelatedObj(relatedStore, relatedObj, oldRelatedObject), function(relatedObj) {
                         self._store.getObjectAccessor().setValue(self._obj, relation.name, relatedObj);
                     });
@@ -1741,13 +1737,10 @@ function namespace(root) {
                 // So, we don't have to sync aggregate here, but we have to set at least PK and default values.
                 // We assume that concurrent transaction can't to delete any item of aggregate because of
                 // optimistic offline lock for whole aggregate (the root of aggregate).
-                var oldRelatedObjectList = self._previousState[relation.name] || [];
-                if (!oldRelatedObjectList.length) {
-                    oldRelatedObjectList = relatedStore.findList(relation.getRelatedQuery(self._obj));
-                }
+                var oldRelatedObjectList = self._getOldRelatedObjectCollection(relation);
                 // TODO: Set here the reactive result to the object?
                 return whenIter(newRelatedObjectList, function(relatedObj, i) {
-                    self._setForeignKeyToRelatedObj(self._obj, relation, relatedObj);
+                    self._setForeignKeyValueToRelatedObject(relation, relatedObj);
                     return when(self._handleRelatedObj(relatedStore, relatedObj, oldRelatedObjectList[i]), function(relatedObj) {
                         newRelatedObjectList[i] = relatedObj;
                     });
@@ -1761,10 +1754,7 @@ function namespace(root) {
             }), function(m2mRelation) {
                 var relatedStore = m2mRelation.getRelatedStore();
                 var newRelatedObjectList = self._store.getObjectAccessor().getValue(self._obj, m2mRelation.name) || [];
-                var oldRelatedObjectList = self._previousState[m2mRelation.name] || [];
-                if (!oldRelatedObjectList.length) {
-                    oldRelatedObjectList = relatedStore.findList(m2mRelation.getRelatedQuery(self._obj));
-                }
+                var oldRelatedObjectList = self._getOldRelatedObjectCollection(m2mRelation);
                 return whenIter(newRelatedObjectList, function(relatedObj, i) {
                     return when(self._handleRelatedObj(relatedStore, relatedObj, oldRelatedObjectList[i]), function(relatedObj) {
                         newRelatedObjectList[i] = relatedObj;
@@ -1776,8 +1766,19 @@ function namespace(root) {
         _handleRelatedObj: function(relatedStore, relatedObj, associatedRelatedObj) {
             return relatedStore.decompose(relatedObj, associatedRelatedObj);
         },
-        _setForeignKeyToRelatedObj: function(obj, relation, relatedObj) {
-            var value = relation.getValue(obj);
+        _setForeignKeyValueFromRelatedObject: function(relation, relatedObj) {
+            var value = relation.getRelatedValue(relatedObj);
+            var field = relation.getField();
+            for (var i = 0; i < field.length; i++) {
+                if (typeof relation.store.getObjectAccessor().getValue(this._obj, field[i]) === "undefined") {
+                    relation.store.getObjectAccessor().setValue(this._obj, field[i], value[i]);
+                } else if (relation.store.getObjectAccessor().getValue(this._obj, field[i]) !== value[i]) {
+                    throw Error("Incorrect value of Foreigh Key!");
+                }
+            }
+        },
+        _setForeignKeyValueToRelatedObject: function(relation, relatedObj) {
+            var value = relation.getValue(this._obj);
             var relatedField = relation.getRelatedField();
             for (var i = 0; i < relatedField.length; i++) {
                 if (typeof relation.getRelatedStore().getObjectAccessor().getValue(relatedObj, relatedField[i]) === "undefined") {
@@ -1809,6 +1810,19 @@ function namespace(root) {
             if (!m2mStore.findList(query).length) {  // Prevent duplicates for bidirectional m2m.
                 return m2mStore.getLocalStore().add(m2mObject);
             }
+        },
+        _getOldRelatedObject: function(relation) {
+            var oldRelatedObject = this._previousState[relation.name];
+            if (!oldRelatedObject) {
+                oldRelatedObject = relation.getRelatedStore().get(relation.getRelatedQuery(this._obj));
+            }
+        },
+        _getOldRelatedObjectCollection: function(relation) {
+            var oldRelatedObjectList = this._previousState[relation.name] || [];
+            if (!oldRelatedObjectList.length) {
+                oldRelatedObjectList = relation.getRelatedStore().findList(relation.getRelatedQuery(this._obj));
+            }
+            return oldRelatedObjectList;
         }
     };
 
