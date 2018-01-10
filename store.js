@@ -1637,7 +1637,7 @@ function namespace(root) {
                 if (!self._isRelationAllowed(relationName)) {
                     return;
                 }
-                var relation = self._store.relations.oneToMany[relationName];
+                var relation = self._store.getRelation(relationName);
                 var relatedStore = relation.getRelatedStore();
                 var relatedQueryResult = relatedStore.find(relation.getRelatedQuery(self._obj));
                 return when(relatedQueryResult, function(relatedQueryResult) {
@@ -1658,7 +1658,7 @@ function namespace(root) {
                 if (!self._isRelationAllowed(relationName)) {
                     return;
                 }
-                var m2mRelation = self._store.relations.manyToMany[relationName];
+                var m2mRelation = self._store.getRelation(relationName);
                 var relatedStore = m2mRelation.getRelatedStore();
                 var relatedQueryResult = relatedStore.find(m2mRelation.getRelatedQuery(self._obj));
                 self._store.getObjectAccessor().setValue(self._obj, relationName, relatedQueryResult);
@@ -1712,7 +1712,7 @@ function namespace(root) {
         _handleForeignKey: function() {
             var self = this;
             return whenIter(keys(this._store.relations.foreignKey), function(relationName) {
-                var relation = self._store.relations.foreignKey[relationName];
+                var relation = self._store.getRelation(relationName);
                 var relatedStore = relation.getRelatedStore();
                 var relatedObj = self._store.getObjectAccessor().getValue(self._obj, relationName);
                 if (relatedObj && typeof relatedObj === "object") {
@@ -1729,7 +1729,7 @@ function namespace(root) {
                 if (self._store.relationIsUsedByM2m(relationName)) {
                     return;
                 }
-                var relation = self._store.relations.oneToMany[relationName];
+                var relation = self._store.getRelation(relationName);
                 var relatedStore = relation.getRelatedStore();
                 var newRelatedObjectList = self._store.getObjectAccessor().getValue(self._obj, relationName) || [];
                 // When we add an aggregate to a single endpoint,
@@ -1772,7 +1772,7 @@ function namespace(root) {
         _handleManyToMany: function() {
             var self = this;
             return whenIter(keys(this._store.relations.manyToMany), function(relationName) {
-                var m2mRelation = self._store.relations.manyToMany[relationName];
+                var m2mRelation = self._store.getRelation(relationName);
                 var relatedStore = m2mRelation.getRelatedStore();
                 var relatedObjectList = self._store.getObjectAccessor().getValue(self._obj, relationName) || [];
                 return whenIter(relatedObjectList, function(relatedObj, i) {
@@ -1784,10 +1784,10 @@ function namespace(root) {
             });
         },
         _addManyToManyRelation: function(m2mRelation, relatedObj) {
-            var relation = this._store.relations.oneToMany[m2mRelation.relation];
+            var relation = this._store.getRelation(m2mRelation.relation);
             var m2mStore = relation.getRelatedStore();
             var relatedStore = m2mRelation.getRelatedStore();
-            var relatedRelation = relatedStore.relations.oneToMany[m2mRelation.relatedRelation];
+            var relatedRelation = relatedStore.getRelation(m2mRelation.relatedRelation);
             var value = relation.getValue(this._obj);
             var relatedValue = relatedRelation.getValue(relatedObj);
 
