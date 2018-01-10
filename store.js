@@ -1739,9 +1739,9 @@ function namespace(root) {
             var value = relation.getValue(obj);
             var relatedField = relation.getRelatedField();
             for (var i = 0; i < relatedField.length; i++) {
-                if (typeof relatedObj[relatedField[i]] === "undefined") {
-                    relatedObj[relatedField[i]] = value[i];
-                } else if (relatedObj[relatedField[i]] !== value[i]) {
+                if (typeof relation.getRelatedStore().getObjectAccessor().getValue(relatedObj, relatedField[i]) === "undefined") {
+                    relation.getRelatedStore().getObjectAccessor().setValue(relatedObj, relatedField[i], value[i]);
+                } else if (relation.getRelatedStore().getObjectAccessor().getValue(relatedObj, relatedField[i]) !== value[i]) {
                     throw Error("Incorrect value of Foreigh Key!");
                 }
             }
@@ -3406,7 +3406,9 @@ function namespace(root) {
      */
     function setNull(relatedObj, obj, old, relation, state) {
         if (!(typeof relation.relatedField === "string")) { throw Error("Unable set NULL to composite relation!"); }
-        relatedObj[relation.relatedField] = null;  // It's not actual for composite relations.
+        relation.getRelatedField().forEach(function(field) {
+            relation.getRelatedStore().getObjectAccessor().setValue(relatedObj, field, null);
+        }); // It's not actual for composite relations.
         return relation.getRelatedStore().update(relatedObj, state);
     }
 
@@ -3415,10 +3417,10 @@ function namespace(root) {
      * Only Fk, m2m
      */
     function compose(relatedObj, obj, old, relation, state) {
-        if (!relatedObj[relation.relatedName]) {
-            relatedObj[relation.relatedName] = [];
+        if (!relation.getRelatedStore().getObjectAccessor().getValue(relatedObj, relation.relatedName)) {
+            relation.getRelatedStore().getObjectAccessor().setValue(relatedObj, relation.relatedName, []);
         }
-        relatedObj[relation.relatedName].push(obj);
+        relation.getRelatedStore().getObjectAccessor().getValue(relatedObj, relation.relatedName).push(obj);
         return Promise.resolve(relatedObj);
     }
 
@@ -3427,8 +3429,8 @@ function namespace(root) {
      * Only o2m, m2m
      */
     function decompose(relatedObj, obj, old, relation, state) {
-        if (relatedObj[relation.relatedName]) {
-            arrayRemove(relatedObj[relation.relatedName], obj);
+        if (relation.getRelatedStore().getObjectAccessor().getValue(relatedObj, relation.relatedName)) {
+            arrayRemove(relation.getRelatedStore().getObjectAccessor().getValue(relatedObj, relation.relatedName), obj);
         }
         return Promise.resolve(relatedObj);
     }
