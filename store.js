@@ -542,18 +542,6 @@ function namespace(root) {
             relation.name = name;
             relation.store = this;
             this._relations[name] = relation;
-            var classMapping = {  // TODO: Remove me on refactoring finish.
-                foreignKey: ForeignKey,
-                oneToOne: OneToOne,
-                oneToMany: OneToMany,
-                manyToMany: ManyToMany
-            };
-            for (var key in classMapping) {
-                if (classMapping[key] === relation.constructor) {
-                    this.relations[key][name] = this._relations[name];
-                    break;
-                }
-            }
         },
         relationIsUsedByM2m: function(relationName) {
             return !!this.getRelations().filter(function(relation) {
@@ -563,7 +551,6 @@ function namespace(root) {
             }).length;
         },
         _initRelations: function(relations) {
-            this.relations = relations ? relations : {};
             this._relations = {};
             var classMapping = {
                 foreignKey: ForeignKey,
@@ -571,12 +558,12 @@ function namespace(root) {
                 oneToMany: OneToMany,
                 manyToMany: ManyToMany
             };
-            for (var key in classMapping) {
-                if (!(key in this.relations)) {
-                    this.relations[key] = {};
+            for (var typeKey in classMapping) {
+                if (!(typeKey in relations)) {
+                    continue;
                 }
-                for (var name in this.relations[key]) {
-                    this.addRelation(name, new classMapping[key](this.relations[key][name]));
+                for (var name in relations[typeKey]) {
+                    this.addRelation(name, new classMapping[typeKey](relations[typeKey][name]));
                 }
             }
         },
