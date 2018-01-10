@@ -1704,27 +1704,26 @@ function namespace(root) {
         },
         _handleForeignKey: function() {
             var self = this;
-            return whenIter(keys(this._store.relations.foreignKey), function(relationName) {
-                var relation = self._store.getRelation(relationName);
+            return whenIter(this._store.getRelations().filter(function(relation) {
+                return relation instanceof ForeignKey;
+            }), function(relation) {
                 var relatedStore = relation.getRelatedStore();
-                var relatedObj = self._store.getObjectAccessor().getValue(self._obj, relationName);
+                var relatedObj = self._store.getObjectAccessor().getValue(self._obj, relation.name);
                 if (relatedObj && typeof relatedObj === "object") {
                     self._setForeignKeyToRelatedObj(relatedObj, relation.getRelatedRelation(), self._obj);
                     return when(self._handleRelatedObj(relatedStore, relatedObj), function(relatedObj) {
-                        self._store.getObjectAccessor().setValue(self._obj, relationName, relatedObj);
+                        self._store.getObjectAccessor().setValue(self._obj, relation.name, relatedObj);
                     });
                 }
             });
         },
         _handleOneToMany: function() {
             var self = this;
-            return whenIter(keys(this._store.relations.oneToMany), function(relationName) {
-                if (self._store.relationIsUsedByM2m(relationName)) {
-                    return;
-                }
-                var relation = self._store.getRelation(relationName);
+            return whenIter(this._store.getRelations().filter(function(relation) {
+                return (relation instanceof OneToMany) && !self._store.relationIsUsedByM2m(relation.name);
+            }), function(relation) {
                 var relatedStore = relation.getRelatedStore();
-                var newRelatedObjectList = self._store.getObjectAccessor().getValue(self._obj, relationName) || [];
+                var newRelatedObjectList = self._store.getObjectAccessor().getValue(self._obj, relation.name) || [];
                 // When we add an aggregate to a single endpoint,
                 // the all child of the aggregate in the memory don't have PK,
                 // thus, we have to associate child manually based on their order.
@@ -1735,7 +1734,7 @@ function namespace(root) {
                 // So, we don't have to sync aggregate here, but we have to set at least PK and default values.
                 // We assume that concurrent transaction can't to delete any item of aggregate because of
                 // optimistic offline lock for whole aggregate (the root of aggregate).
-                var oldRelatedObjectList = self._previousState[relationName] || [];
+                var oldRelatedObjectList = self._previousState[relation.name] || [];
                 if (!oldRelatedObjectList.length) {
                     oldRelatedObjectList = relatedStore.findList(relation.getRelatedQuery(self._obj));
                 }
@@ -1764,10 +1763,11 @@ function namespace(root) {
         },
         _handleManyToMany: function() {
             var self = this;
-            return whenIter(keys(this._store.relations.manyToMany), function(relationName) {
-                var m2mRelation = self._store.getRelation(relationName);
+            return whenIter(this._store.getRelations().filter(function(relation) {
+                return relation instanceof ManyToMany;
+            }), function(m2mRelation) {
                 var relatedStore = m2mRelation.getRelatedStore();
-                var relatedObjectList = self._store.getObjectAccessor().getValue(self._obj, relationName) || [];
+                var relatedObjectList = self._store.getObjectAccessor().getValue(self._obj, m2mRelation.name) || [];
                 return whenIter(relatedObjectList, function(relatedObj, i) {
                     return when(self._handleRelatedObj(relatedStore, relatedObj), function(relatedObj) {
                         relatedObjectList[i] = relatedObj;
