@@ -703,6 +703,9 @@ function namespace(root) {
                 return relatedQueryResult.map(function(obj) { return relation.getQuery(obj); });
             });
         },
+        makeModelRelationGetter: function() {
+            throw Error("Not Implemented Error");
+        },
         _makeModelRelatedObjectGetter: function() {
             var relation = this;
             return function() {
@@ -1602,14 +1605,14 @@ function namespace(root) {
                 var relatedStore = relation.getRelatedStore();
                 var relatedQueryResult = relatedStore.find(relation.getRelatedQuery(self._obj));
                 return when(relatedQueryResult, function(relatedQueryResult) {
-                    self._setObjectValue(relation, relatedQueryResult);
+                    self._setObjectRelation(relation, relatedQueryResult);
                     return whenIter(relatedQueryResult, function(relatedObj) {
                         return self._handleRelatedObj(relatedStore, relatedObj, self._delegateAllowedRelations(relation.name));
                     });
                 });
             });
         },
-        _setObjectValue: function(relation, relatedQueryResult) {
+        _setObjectRelation: function(relation, relatedQueryResult) {
             if (relation instanceof OneToOne || relation instanceof ForeignKey) {
                 this._store.getObjectAccessor().setValue(this._obj, relation.name, relatedQueryResult[0]);
             } else if (relation instanceof OneToMany || relation instanceof ManyToMany){
@@ -1662,7 +1665,7 @@ function namespace(root) {
         compute: function() {
             var self = this,
                 localStore = this._store.getLocalStore();
-            return when(self._handleForeignKey(), function() {
+            return when(self._handleDependentToOne(), function() {
                 return when(self._associatedObj, function(associatedObj) {
                     if (associatedObj) {
                         self._previousState = self._store.getObjectAccessor().getObjectState(associatedObj);
@@ -1672,26 +1675,50 @@ function namespace(root) {
                     }
                     return when(obj, function(obj) {
                         self._obj = obj;
-                        return when(self._handleOneToMany(), function() {
-                            // TODO: Add support for OneToOne
-                            return when(self._handleManyToMany(), function() {
-                                return self._obj;
+                        return when(self._handleOneToOne(), function() {
+                            return when(self._handleOneToMany(), function() {
+                                return when(self._handleManyToMany(), function() {
+                                    return self._obj;
+                                });
                             });
                         });
                     });
                 });
             });
         },
-        _handleForeignKey: function() {
+        _handleDependentToOne: function() {
             var self = this;
             return whenIter(this._store.getRelations().filter(function(relation) {
-                return relation instanceof ForeignKey;
+                return relation instanceof ForeignKey || (relation instanceof OneToOne && relation.isDependent());
             }), function(relation) {
                 var relatedStore = relation.getRelatedStore();
                 var relatedObj = self._store.getObjectAccessor().getValue(self._obj, relation.name);
                 if (relatedObj && typeof relatedObj === "object") {
+                    var oldRelatedObject = self._previousState[relation.name];
+                    if (!oldRelatedObject) {
+                        oldRelatedObject = relatedStore.get(relation.getRelatedQuery(self._obj));
+                    }
                     self._setForeignKeyToRelatedObj(relatedObj, relation.getRelatedRelation(), self._obj);
-                    return when(self._handleRelatedObj(relatedStore, relatedObj), function(relatedObj) {
+                    return when(self._handleRelatedObj(relatedStore, relatedObj, oldRelatedObject), function(relatedObj) {
+                        self._store.getObjectAccessor().setValue(self._obj, relation.name, relatedObj);
+                    });
+                }
+            });
+        },
+        _handleOneToOne: function() {
+            var self = this;
+            return whenIter(this._store.getRelations().filter(function(relation) {
+                return relation instanceof OneToOne && !relation.isDependent();
+            }), function(relation) {
+                var relatedStore = relation.getRelatedStore();
+                var relatedObj = self._store.getObjectAccessor().getValue(self._obj, relation.name);
+                if (relatedObj && typeof relatedObj === "object") {
+                    var oldRelatedObject = self._previousState[relation.name];
+                    if (!oldRelatedObject) {
+                        oldRelatedObject = relatedStore.get(relation.getRelatedQuery(self._obj));
+                    }
+                    return when(self._handleRelatedObj(relatedStore, relatedObj, oldRelatedObject), function(relatedObj) {
+                        self._setForeignKeyToRelatedObj(self._obj, relation, relatedObj);
                         self._store.getObjectAccessor().setValue(self._obj, relation.name, relatedObj);
                     });
                 }
@@ -1747,10 +1774,14 @@ function namespace(root) {
                 return relation instanceof ManyToMany;
             }), function(m2mRelation) {
                 var relatedStore = m2mRelation.getRelatedStore();
-                var relatedObjectList = self._store.getObjectAccessor().getValue(self._obj, m2mRelation.name) || [];
-                return whenIter(relatedObjectList, function(relatedObj, i) {
-                    return when(self._handleRelatedObj(relatedStore, relatedObj), function(relatedObj) {
-                        relatedObjectList[i] = relatedObj;
+                var newRelatedObjectList = self._store.getObjectAccessor().getValue(self._obj, m2mRelation.name) || [];
+                var oldRelatedObjectList = self._previousState[m2mRelation.name] || [];
+                if (!oldRelatedObjectList.length) {
+                    oldRelatedObjectList = relatedStore.findList(m2mRelation.getRelatedQuery(self._obj));
+                }
+                return whenIter(newRelatedObjectList, function(relatedObj, i) {
+                    return when(self._handleRelatedObj(relatedStore, relatedObj, oldRelatedObjectList[i]), function(relatedObj) {
+                        newRelatedObjectList[i] = relatedObj;
                         return self._addManyToManyRelation(m2mRelation, relatedObj);
                     });
                 });
