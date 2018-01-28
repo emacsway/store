@@ -1308,15 +1308,20 @@ function namespace(root) {
     };
 
 
-    function AbstractQueryWalker(queryEngine, query) {
-        if (!('$query' in query)) {
-            // Don't clone query into itself if you want to keep all references to the root.
-            // We have to keep all references to the same logical level.
-            // A component of the query can be changeable by event.
-            // See emulatedRelation._emulateRelation() for more info.
-            query = {'$query': query};
+    function toFullFeaturedQuery(query) {
+        if ('$query' in query) {
+            return query;
         }
-        this._query = query;
+        // Don't clone query into itself if you want to keep all references to the root.
+        // We have to keep all references to the same logical level.
+        // A component of the query can be changeable by event.
+        // See emulatedRelation._emulateRelation() for more info.
+        return {'$query': query};
+    }
+
+
+    function AbstractQueryWalker(queryEngine, query) {
+        this._query = toFullFeaturedQuery(query);
         this._promises = [];
         this._queryEngine = queryEngine;
     }
