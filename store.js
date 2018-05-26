@@ -2948,7 +2948,7 @@ function namespace(root) {
         },
         delete: function(store, obj, onCommit, onRollback, onPending, onAutocommit) {
             var index = this._findDirty(obj);
-            if (index !== -1 && this._dirtyObjectList[index].cancelable()) {
+            if (index !== -1 && this._dirtyObjectList[index].cancelable()) {  // FIXME: for case when non-cancelable
                 this._dirtyObjectList.splice(index, 1);
                 return Promise.resolve(obj);
             } else {
