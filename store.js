@@ -1308,15 +1308,20 @@ function namespace(root) {
     };
 
 
-    function AbstractQueryWalker(queryEngine, query) {
-        if (!('$query' in query)) {
-            // Don't clone query into itself if you want to keep all references to the root.
-            // We have to keep all references to the same logical level.
-            // A component of the query can be changeable by event.
-            // See emulatedRelation._emulateRelation() for more info.
-            query = {'$query': query};
+    function toFullFeaturedQuery(query) {
+        if ('$query' in query) {
+            return query;
         }
-        this._query = query;
+        // Don't clone query into itself if you want to keep all references to the root.
+        // We have to keep all references to the same logical level.
+        // A component of the query can be changeable by event.
+        // See emulatedRelation._emulateRelation() for more info.
+        return {'$query': query};
+    }
+
+
+    function AbstractQueryWalker(queryEngine, query) {
+        this._query = toFullFeaturedQuery(query);
         this._promises = [];
         this._queryEngine = queryEngine;
     }
@@ -2943,14 +2948,15 @@ function namespace(root) {
         },
         delete: function(store, obj, onCommit, onRollback, onPending, onAutocommit) {
             var index = this._findDirty(obj);
-            if (index !== -1 && this._dirtyObjectList[index].cancelable()) {
+            if (index !== -1) {
                 this._dirtyObjectList.splice(index, 1);
-                return Promise.resolve(obj);
-            } else {
-                var dirty = new DeleteDirty(store, obj, onCommit, onRollback, onPending, onAutocommit);
-                this._dirtyObjectList.push(dirty);
-                return dirty.pending();
+                if (this._dirtyObjectList[index].cancelable()) {
+                    return Promise.resolve(obj);
+                }
             }
+            var dirty = new DeleteDirty(store, obj, onCommit, onRollback, onPending, onAutocommit);
+            this._dirtyObjectList.push(dirty);
+            return dirty.pending();
         },
         _findDirty: function(obj) {
             for (var i = 0; i < this._dirtyObjectList.length; i++) {
