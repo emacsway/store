@@ -2948,14 +2948,15 @@ function namespace(root) {
         },
         delete: function(store, obj, onCommit, onRollback, onPending, onAutocommit) {
             var index = this._findDirty(obj);
-            if (index !== -1 && this._dirtyObjectList[index].cancelable()) {  // FIXME: for case when non-cancelable
+            if (index !== -1) {
                 this._dirtyObjectList.splice(index, 1);
-                return Promise.resolve(obj);
-            } else {
-                var dirty = new DeleteDirty(store, obj, onCommit, onRollback, onPending, onAutocommit);
-                this._dirtyObjectList.push(dirty);
-                return dirty.pending();
+                if (this._dirtyObjectList[index].cancelable()) {
+                    return Promise.resolve(obj);
+                }
             }
+            var dirty = new DeleteDirty(store, obj, onCommit, onRollback, onPending, onAutocommit);
+            this._dirtyObjectList.push(dirty);
+            return dirty.pending();
         },
         _findDirty: function(obj) {
             for (var i = 0; i < this._dirtyObjectList.length; i++) {
