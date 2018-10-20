@@ -8,7 +8,7 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "intern"
+    "test": "intern config=tests/intern.json"
   },
   "repository": {
     "type": "git",

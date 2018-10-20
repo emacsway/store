@@ -1131,7 +1131,7 @@ function namespace(root) {
                     if (!subContext) {
                         continue;
                     }
-                    result = result || this._lookupThroughAggregate(subPath, op, required, objectAccessor, subContext);
+                    result = result || this._lookupThroughAggregate(subPath, op, required, subObjectAccessor, subContext);
                     if (result) {
                         return result;
                     }
@@ -1364,6 +1364,9 @@ function namespace(root) {
         },
         getObjectState: function(obj) {
             return clone(obj, {});
+        },
+        getChildObjectAccessor: function(field) {
+            return this;
         },
         pkExists: function(obj) {
             var self = this;
