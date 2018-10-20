@@ -116,6 +116,34 @@ registerSuite('QueryObjectFilter', () => {
                     ]
                 }, objectAccessor, TEST_COLLECTION[1]));
             }
+        },
+        'nested compound operators': {
+            'should return false for an incorrect value'() {
+                assert.isFalse(queryObjectFilter.execute({
+                    "$and": [
+                        {
+                            "$or": [
+                                {"id": {"$eq": 1}},
+                                {"id": {"$eq": 3}}
+                            ]
+                        },
+                        {"a": {"$eq": 2}}
+                    ]
+                }, objectAccessor, TEST_COLLECTION[0]));
+            },
+            'should return true for the correct value'() {
+                assert.isTrue(queryObjectFilter.execute({
+                    "$and": [
+                        {
+                            "$or": [
+                                {"id": {"$eq": 1}},
+                                {"id": {"$eq": 2}}
+                            ]
+                        },
+                        {"a": {"$eq": 2}}
+                    ]
+                }, objectAccessor, TEST_COLLECTION[1]));
+            }
         }
     };
 });
