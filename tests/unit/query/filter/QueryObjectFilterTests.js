@@ -57,7 +57,7 @@ registerSuite('QueryObjectFilter', () => {
                 assert.isTrue(queryObjectFilter.execute({"c.a": {"$eq": 24}}, objectAccessor, TEST_COLLECTION[1]));
             }
         },
-        'should evaluate $eq operator': {
+        '$eq operator': {
             'should return false for an incorrect value'() {
                 assert.isFalse(queryObjectFilter.execute({"a": {"$eq": 2}}, objectAccessor, TEST_COLLECTION[0]));
             },
@@ -65,7 +65,7 @@ registerSuite('QueryObjectFilter', () => {
                 assert.isTrue(queryObjectFilter.execute({"a": {"$eq": 2}}, objectAccessor, TEST_COLLECTION[1]));
             }
         },
-        'should evaluate $ne operator': {
+        '$ne operator': {
             'should return false for an incorrect value'() {
                 assert.isFalse(queryObjectFilter.execute({"a": {"$ne": 2}}, objectAccessor, TEST_COLLECTION[1]));
             },
@@ -73,7 +73,7 @@ registerSuite('QueryObjectFilter', () => {
                 assert.isTrue(queryObjectFilter.execute({"a": {"$ne": 2}}, objectAccessor, TEST_COLLECTION[0]));
             }
         },
-        'should evaluate $in operator': {
+        '$in operator': {
             'should return false for an incorrect value'() {
                 assert.isFalse(queryObjectFilter.execute({"a": {"$in": [2, 3]}}, objectAccessor, TEST_COLLECTION[0]));
             },
@@ -81,7 +81,7 @@ registerSuite('QueryObjectFilter', () => {
                 assert.isTrue(queryObjectFilter.execute({"a": {"$in": [2, 3]}}, objectAccessor, TEST_COLLECTION[1]));
             }
         },
-        'should evaluate $and operator': {
+        '$and operator': {
             'should return false for an incorrect value'() {
                 assert.isFalse(queryObjectFilter.execute({
                     "$and": [
@@ -94,6 +94,24 @@ registerSuite('QueryObjectFilter', () => {
                 assert.isTrue(queryObjectFilter.execute({
                     "$and": [
                         {"id": {"$eq": 2}},
+                        {"a": {"$eq": 2}}
+                    ]
+                }, objectAccessor, TEST_COLLECTION[1]));
+            }
+        },
+        '$or operator': {
+            'should return false for an incorrect value'() {
+                assert.isFalse(queryObjectFilter.execute({
+                    "$or": [
+                        {"id": {"$eq": 3}},
+                        {"a": {"$eq": 2}}
+                    ]
+                }, objectAccessor, TEST_COLLECTION[0]));
+            },
+            'should return true for the correct value'() {
+                assert.isTrue(queryObjectFilter.execute({
+                    "$or": [
+                        {"id": {"$eq": 1}},
                         {"a": {"$eq": 2}}
                     ]
                 }, objectAccessor, TEST_COLLECTION[1]));
