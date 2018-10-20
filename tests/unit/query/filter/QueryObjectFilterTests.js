@@ -37,7 +37,7 @@ registerSuite('QueryObjectFilter', () => {
             queryObjectFilter = store.queryObjectFilter;
             objectAccessor = new store.ObjectAccessor();
         },
-        'resolve property': {
+        'should resolve property': {
             'should return false for an incorrect value of field'() {
                 assert.isFalse(queryObjectFilter.execute({"a": {"$eq": 2}}, objectAccessor, TEST_COLLECTION[0]));
             },
@@ -55,6 +55,14 @@ registerSuite('QueryObjectFilter', () => {
             },
             'should return true for the correct value of nested object field'() {
                 assert.isTrue(queryObjectFilter.execute({"c.a": {"$eq": 24}}, objectAccessor, TEST_COLLECTION[1]));
+            }
+        },
+        'should evaluate $eq operator': {
+            'should return false for an incorrect value'() {
+                assert.isFalse(queryObjectFilter.execute({"a": {"$eq": 2}}, objectAccessor, TEST_COLLECTION[0]));
+            },
+            'should return true for the correct value'() {
+                assert.isTrue(queryObjectFilter.execute({"a": {"$eq": 2}}, objectAccessor, TEST_COLLECTION[1]));
             }
         }
     };
