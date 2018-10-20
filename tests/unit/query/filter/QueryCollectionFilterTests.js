@@ -39,6 +39,12 @@ registerSuite('QueryCollectionFilter', () => {
                 var result = queryCollectionFilter.execute({"$offset": 3}, objectAccessor, TEST_COLLECTION);
                 assert.deepEqual(result.map((obj) => obj.id), [4, 5]);
             }
+        },
+        '$limit operator': {
+            'should return a list sliced by limit'() {
+                var result = queryCollectionFilter.execute({"$limit": 3}, objectAccessor, TEST_COLLECTION);
+                assert.deepEqual(result.map((obj) => obj.id), [1, 2, 3]);
+            }
         }
     };
 });
