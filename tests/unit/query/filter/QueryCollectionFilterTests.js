@@ -33,6 +33,12 @@ registerSuite('QueryCollectionFilter', () => {
                 }, objectAccessor, TEST_COLLECTION);
                 assert.lengthOf(result, 1);
             }
+        },
+        '$offset operator': {
+            'should return a list sliced by offset'() {
+                var result = queryCollectionFilter.execute({"$offset": 3}, objectAccessor, TEST_COLLECTION);
+                assert.deepEqual(result.map((obj) => obj.id), [4, 5]);
+            }
         }
     };
 });
