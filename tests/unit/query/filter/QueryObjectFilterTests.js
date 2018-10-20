@@ -64,6 +64,14 @@ registerSuite('QueryObjectFilter', () => {
             'should return true for the correct value'() {
                 assert.isTrue(queryObjectFilter.execute({"a": {"$eq": 2}}, objectAccessor, TEST_COLLECTION[1]));
             }
+        },
+        'should evaluate $ne operator': {
+            'should return false for an incorrect value'() {
+                assert.isFalse(queryObjectFilter.execute({"a": {"$ne": 2}}, objectAccessor, TEST_COLLECTION[1]));
+            },
+            'should return true for the correct value'() {
+                assert.isTrue(queryObjectFilter.execute({"a": {"$ne": 2}}, objectAccessor, TEST_COLLECTION[0]));
+            }
         }
     };
 });
