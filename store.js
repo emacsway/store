@@ -932,9 +932,9 @@ function namespace(root) {
                 indexable: false,
                 compound: false
             });
-            for (var i in properties) {
-                if (properties.hasOwnProperty(i)) {
-                    operatorCallable[i] = properties[i];
+            for (var property in properties) {
+                if (properties.hasOwnProperty(property)) {
+                    operatorCallable[property] = properties[property];
                 }
             }
             this._operators[operatorName] = operatorCallable;
@@ -1108,75 +1108,41 @@ function namespace(root) {
             );
         },
         execute: function(query, objectAccessor, context) {
-            var result = true;
-            for (var left in query) {
-                if (isSpecialAttr(left)) { continue; }
-                var right = query[left];
-                if (this.has(left)) {
-                    result = result && this.get(left).call(this, right, objectAccessor, context);
-                } else {
-                    result = result && this._executeRight(left, right, objectAccessor, context);
-                }
-                if (!result) {
-                    return result;
-                }
-            }
-            return result;
-        },
-        _executeRight: function(left, right, objectAccessor, context) {
-            var result = true;
-            for (var key in right) {
-                result = result && this._lookupThroughAggregate(left, key, right[key], objectAccessor, context);
-                if (!result) {
-                    return result;
-                }
-            }
-            return result;
-        },
-        _lookupThroughAggregate: function(path, op, required, objectAccessor, context) {
-            if (path.indexOf('.') !== -1) {
-                var result = false;
-                var pathParts = path.split('.');
-                var field = pathParts.shift();
-                var subPath = pathParts.join('.');
-                var subContexts = objectAccessor.getValue(context, field);
-                var subObjectAccessor = objectAccessor.getChildObjectAccessor(field);
-                subContexts = toArray(subContexts);
-                for (var i = 0; i < subContexts.length; i++) {
-                    var subContext = subContexts[i];
-                    if (!subContext) {
-                        continue;
-                    }
-                    result = result || this._lookupThroughAggregate(subPath, op, required, objectAccessor, subContext);
-                    if (result) {
-                        return result;
-                    }
-                }
-                return result;
-            } else {
-                return this.get(op).call(this, [path, required], objectAccessor, context);
-            }
+            var self = this;
+            var operators = keys(this._operators).sort(function(left, right) {
+                return self._operators[right].precedence - self._operators[left].precedence;
+            });
+            return operators.reduce(function(collection, operator) {
+                return (
+                    operator in query ?
+                    self._operators[operator].call(self, query[operator], objectAccessor, collection) :
+                    collection
+                );
+            }, context);
         }
     }, Object.create(AbstractQueryEngine.prototype));
 
 
     var queryCollectionFilter = new QueryCollectionFilter(queryObjectFilter);
 
-    queryCollectionFilter.register('$query', function(operands, objectAccessor, collection) {
-        return this.queryObjectFilter.execute(operands, objectAccessor, collection);
-    }, {indexable: true});
+    queryCollectionFilter.register('$query', function(query, objectAccessor, collection) {
+        var filter = this.queryObjectFilter;
+        return Array.prototype.filter.call(collection, function(obj) {
+            return filter.execute(query, objectAccessor, obj);
+        });
+    }, {indexable: true, precedence: 100});
     queryCollectionFilter.register('$subjects', function(operands, objectAccessor, collection) {
-        return true;
-    }, {indexable: true});
+        return collection;
+    }, {indexable: true, precedence: 0});
     queryCollectionFilter.register('$orderby', function(operands, objectAccessor, collection) {
-        return true;
-    }, {indexable: true, compound: true});
-    queryCollectionFilter.register('$limit', function(operands, objectAccessor, collection) {
-        return true;
-    }, {indexable: true});
-    queryCollectionFilter.register('$offset', function(operands, objectAccessor, collection) {
-        return true;
-    }, {indexable: true});
+        return collection;
+    }, {indexable: true, compound: true, precedence: 90});
+    queryCollectionFilter.register('$offset', function(value, objectAccessor, collection) {
+        return Array.prototype.slice.call(collection, value);
+    }, {indexable: true, precedence: 80});
+    queryCollectionFilter.register('$limit', function(value, objectAccessor, collection) {
+        return Array.prototype.slice.call(collection, 0, value);
+    }, {indexable: true, precedence: 70});
 
 
     function DjangoFilterQueryEngine() {
@@ -2400,7 +2366,7 @@ function namespace(root) {
                             return self.find(query);
                         },
                         function(obj) {
-                            return queryCollectionFilter.execute(query, self.getObjectAccessor(), obj);
+                            return queryObjectFilter.execute(query['$query'], self.getObjectAccessor(), obj);
                         },
                         objectList,
                         query['$subjects']
@@ -2528,9 +2494,7 @@ function namespace(root) {
         _find: function(query, options) {
             var self = this;
             var initObjectList = self._getInitObjectList(query);
-            return initObjectList.filter(function(obj) {
-                return !query['$query'] || self._queryEngine.execute(query, self.getObjectAccessor(), obj);
-            });
+            return this._queryEngine.execute(query, this.getObjectAccessor(), initObjectList);
         },
         _getInitObjectList: function(query) {
             return new GetInitObjectList(this._queryEngine, query, this).compute();
