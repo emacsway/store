@@ -13,6 +13,7 @@ etags
 .search/
 dist/
 nbproject/
+node_modules/
 build/
 docs/_build/
 

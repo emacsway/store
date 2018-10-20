@@ -996,6 +996,7 @@ function namespace(root) {
                 var field = pathParts.shift();
                 var subPath = pathParts.join('.');
                 var subContexts = objectAccessor.getValue(context, field);
+                var subObjectAccessor = objectAccessor.getChildObjectAccessor(field);
                 subContexts = toArray(subContexts);
                 for (var i = 0; i < subContexts.length; i++) {
                     var subContext = subContexts[i];
@@ -1075,6 +1076,119 @@ function namespace(root) {
         return objectAccessor.getValue(obj, field) != value;
     });
     simpleQueryEngine.register('$callable', function(operands, objectAccessor, obj) {
+        if (typeof operands === "function") {
+            var func = operands;
+            return func(obj);
+        }
+        var field = operands[0],
+            func = operands[1];
+        return func(objectAccessor.getValue(obj, field), obj, field);
+    });
+
+
+    function QueryObjectFilter() {
+        AbstractQueryEngine.call(this);
+    }
+    QueryObjectFilter.prototype = clone({
+        constructor: QueryObjectFilter,
+        execute: function(query, objectAccessor, context) {
+            var result = true;
+            for (var left in query) {
+                if (isSpecialAttr(left)) { continue; }
+                var right = query[left];
+                if (this.has(left)) {
+                    result = result && this.get(left).call(this, right, objectAccessor, context);
+                } else {
+                    result = result && this._executeRight(left, right, objectAccessor, context);
+                }
+                if (!result) {
+                    return result;
+                }
+            }
+            return result;
+        },
+        _executeRight: function(left, right, objectAccessor, context) {
+            var result = true;
+            for (var key in right) {
+                result = result && this._lookupThroughAggregate(left, key, right[key], objectAccessor, context);
+                if (!result) {
+                    return result;
+                }
+            }
+            return result;
+        },
+        _lookupThroughAggregate: function(path, op, required, objectAccessor, context) {
+            if (path.indexOf('.') !== -1) {
+                var result = false;
+                var pathParts = path.split('.');
+                var field = pathParts.shift();
+                var subPath = pathParts.join('.');
+                var subContexts = objectAccessor.getValue(context, field);
+                var subObjectAccessor = objectAccessor.getChildObjectAccessor(field);
+                subContexts = toArray(subContexts);
+                for (var i = 0; i < subContexts.length; i++) {
+                    var subContext = subContexts[i];
+                    if (!subContext) {
+                        continue;
+                    }
+                    result = result || this._lookupThroughAggregate(subPath, op, required, objectAccessor, subContext);
+                    if (result) {
+                        return result;
+                    }
+                }
+                return result;
+            } else {
+                return this.get(op).call(this, [path, required], objectAccessor, context);
+            }
+        }
+    }, Object.create(AbstractQueryEngine.prototype));
+
+
+    var queryObjectFilter = new QueryObjectFilter();
+
+    queryObjectFilter.register('$and', function(operands, objectAccessor, obj) {
+        var result = true;
+        for (var i = 0; i < operands.length; i++) {
+            result = result && this.execute(operands[i], objectAccessor, obj);
+            if (!result) {
+                return result;
+            }
+        };
+        return result;
+    }, {indexable: true, compound: true});
+    queryObjectFilter.register('$or', function(operands, objectAccessor, obj) {
+        var result = false;
+        for (var i = 0; i < operands.length; i++) {
+            result = result || this.execute(operands[i], objectAccessor, obj);
+            if (result) {
+                return result;
+            }
+        };
+        return result;
+    }, {compound: true});
+    queryObjectFilter.register('$in', function(operands, objectAccessor, obj) {
+        var result = false,
+            field = operands[0],
+            values = operands[1];
+        for (var i = 0; i < values.length; i++) {
+            result = result || this.get('$eq').call(this, [field, values[i]], objectAccessor, obj);
+            if (result) {
+                return result;
+            }
+        }
+        return result;
+    });
+    queryObjectFilter.register('$eq', function(operands, objectAccessor, obj) {
+        var field = operands[0],
+            value = operands[1];
+        return objectAccessor.getValue(obj, field) === value;
+    }, {indexable: true});
+    queryObjectFilter.register('$ne', function(operands, objectAccessor, obj) {
+        var field = operands[0],
+            value = operands[1];
+        return objectAccessor.getValue(obj, field) !== value;
+    });
+    queryObjectFilter.register('$callable', function(operands, objectAccessor, obj) {
         if (typeof operands === "function") {
             var func = operands;
             return func(obj);
@@ -2730,6 +2844,12 @@ function namespace(root) {
             }
             return record;
         },
+        loadError: function(error) {
+            return error;
+        },
+        dumpQuery: function(query) {
+            return query;
+        },
         isLoaded: function(recordOrObj) {
             return recordOrObj instanceof this._model;
         },
@@ -3717,8 +3837,11 @@ function namespace(root) {
 
     return {
         Store: Store,
+        ObjectAccessor: ObjectAccessor,
         AbstractQueryEngine: AbstractQueryEngine,
         SimpleQueryEngine: SimpleQueryEngine,
+        QueryObjectFilter: QueryObjectFilter,
+        queryObjectFilter: queryObjectFilter,
         simpleQueryEngine: simpleQueryEngine,
         DjangoFilterQueryEngine: DjangoFilterQueryEngine,
         djangoFilterQueryEngine: djangoFilterQueryEngine,

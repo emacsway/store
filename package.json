@@ -8,7 +8,7 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "tests/testSuite.js"
+    "test": "intern"
   },
   "repository": {
     "type": "git",
@@ -29,8 +29,10 @@
     "url": "https://github.com/joor/store-js-external/issues"
   },
   "devDependencies": {
+    "intern": "^4.3.1",
     "intern-geezer": "^2",
-    "requirejs": "^2.3.3"
+    "requirejs": "^2.3.6",
+    "systemjs": "^2.0.2"
   },
   "homepage": "https://github.com/joor/store-js-external#readme"
 }
