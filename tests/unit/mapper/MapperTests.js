@@ -33,7 +33,18 @@ registerSuite('Mapper', () => {
 
     return {
         beforeEach() {
-            mapper = new store.Mapper();
+            mapper = new store.Mapper({
+                fields: [
+                    new store.Field('id'),
+                    new store.RenamedField('a', 'aRenamed'),
+                    new store.Field(
+                        'point',
+                        (record) => new Point(record['x'], record['y']),
+                        (value) => ({x: value['x'], y: value['y']}),
+                        (error) => [error.x, error.y]
+                    )
+                ]
+            });
         },
         'TestModel': {
             'should map point'() {
@@ -43,7 +54,7 @@ registerSuite('Mapper', () => {
                     x: 5,
                     y: 6
                 });
-                assert.deepEqual(obj, new TestModel(1, 2, newPoint(5, 6)));
+                assert.deepEqual(obj, new TestModel(1, 2, new Point(5, 6)));
             }
         }
     };
