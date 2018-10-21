@@ -21,11 +21,31 @@ function TestModel (id, a, b, nestedCollection, nestedObject) {
 }
 
 const TEST_COLLECTION = [
-	new TestModel(1, 1, 1),
-	new TestModel(2, 2, 2),
-	new TestModel(3, 2, 3),
-	new TestModel(4, 5, 4),
-	new TestModel(5, 4, 4)
+	new TestModel(1, 1, 1, [
+		new TestModel(11, 11),
+		new TestModel(12, 12),
+		new TestModel(13, 13)
+	], new TestModel(14, 14)),
+	new TestModel(2, 2, 2, [
+		new TestModel(21, 31),
+		new TestModel(22, 22),
+		new TestModel(23, 23)
+	], new TestModel(24, 24)),
+	new TestModel(3, 2, 3, [
+		new TestModel(31, 21),
+		new TestModel(32, 32),
+		new TestModel(33, 33)
+	], new TestModel(34, 34)),
+	new TestModel(4, 5, 4, [
+		new TestModel(41, 41),
+		new TestModel(42, 42),
+		new TestModel(43, 53)
+	], new TestModel(44, 44)),
+	new TestModel(5, 4, 4, [
+		new TestModel(51, 51),
+		new TestModel(52, 52),
+		new TestModel(53, 43)
+	], new TestModel(54, 54))
 ];
 
 registerSuite('QueryCollectionFilter', () => {
@@ -74,6 +94,20 @@ registerSuite('QueryCollectionFilter', () => {
                 var result = queryCollectionFilter.execute({"$orderby": ["a", "-b"]}, objectAccessor, TEST_COLLECTION);
                 assert.deepEqual(result.map((obj) => obj.a), [1, 2, 2, 4, 5]);
                 assert.deepEqual(result.map((obj) => obj.b), [1, 3, 2, 4, 4]);
+            },
+            'should resolve property': {
+                'sorted by ascending for nested collection field'() {
+                    var result = queryCollectionFilter.execute({
+                        "$orderby": "nestedCollection.a"
+                    }, objectAccessor, TEST_COLLECTION);
+                    assert.deepEqual(result.map((obj) => obj.id), [1, 3, 2, 4, 5]);
+                },
+                'sorted by descending for nested collection field'() {
+                    var result = queryCollectionFilter.execute({
+                        "$orderby": "-nestedCollection.a"
+                    }, objectAccessor, TEST_COLLECTION);
+                    assert.deepEqual(result.map((obj) => obj.id), [4, 5, 3, 2, 1]);
+                }
             }
         },
         '$offset operator': {

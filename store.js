@@ -989,28 +989,30 @@ function namespace(root) {
             }
             return result;
         },
-        _lookupThroughAggregate: function(path, op, required, objectAccessor, obj) {
+        _lookupThroughAggregate: function(path, op, requiredValue, objectAccessor, obj) {
             if (path.indexOf('.') !== -1) {
                 var result = false;
                 var pathParts = path.split('.');
                 var field = pathParts.shift();
                 var subPath = pathParts.join('.');
-                var subContexts = objectAccessor.getValue(obj, field);
+                var subObjectList = objectAccessor.getValue(obj, field);
                 var subObjectAccessor = objectAccessor.getChildObjectAccessor(field);
-                subContexts = toArray(subContexts);
-                for (var i = 0; i < subContexts.length; i++) {
-                    var subContext = subContexts[i];
-                    if (!subContext) {
+                subObjectList = toArray(subObjectList);
+                for (var i = 0; i < subObjectList.length; i++) {
+                    var subObj = subObjectList[i];
+                    if (!subObj) {
                         continue;
                     }
-                    result = result || this._lookupThroughAggregate(subPath, op, required, subObjectAccessor, subContext);
+                    result = result || this._lookupThroughAggregate(
+                        subPath, op, requiredValue, subObjectAccessor, subObj
+                    );
                     if (result) {
                         return result;
                     }
                 }
                 return result;
             } else {
-                return this.get(op).call(this, [path, required], objectAccessor, obj);
+                return this.get(op).call(this, [path, requiredValue], objectAccessor, obj);
             }
         }
     }, Object.create(AbstractQueryEngine.prototype));
@@ -1181,15 +1183,20 @@ function namespace(root) {
             return collection;
         },
         _compareAsc: function(field, leftObj, rightObj) {
-            if (this._objectAccessor.getValue(leftObj, field) < this._objectAccessor.getValue(rightObj, field)) {
+            if (this._getMinValue(leftObj, field) < this._getMinValue(rightObj, field)) {
                 return -1;
-            } else if (this._objectAccessor.getValue(leftObj, field) > this._objectAccessor.getValue(rightObj, field)) {
+            } else if (this._getMinValue(leftObj, field) > this._getMinValue(rightObj, field)) {
                 return 1;
             }
             return 0;
         },
-        _compareDesc: function(field, leftObj, rightObj) {
-            return this._compareAsc(field, rightObj, leftObj);
+        _compareDesc: function(field, rightObj, leftObj) {
+            if (this._getMaxValue(leftObj, field) < this._getMaxValue(rightObj, field)) {
+                return -1;
+            } else if (this._getMaxValue(leftObj, field) > this._getMaxValue(rightObj, field)) {
+                return 1;
+            }
+            return 0;
         },
         _compareCustom: function(field, customOrder, leftObj, rightObj) {
             return (
@@ -1208,6 +1215,33 @@ function namespace(root) {
                 return clause;
             }
             return operand;
+        },
+        _getMinValue: function(obj, path) {
+            return Math.min.apply(Math, this._collectValuesThroughAggregate(obj, path));
+        },
+        _getMaxValue: function(obj, path) {
+            return Math.max.apply(Math, this._collectValuesThroughAggregate(obj, path));
+        },
+        _collectValuesThroughAggregate: function(obj, path) {
+            if (path.indexOf('.') !== -1) {
+                var result = [];
+                var pathParts = path.split('.');
+                var field = pathParts.shift();
+                var subPath = pathParts.join('.');
+                var subObjectList = this._objectAccessor.getValue(obj, field);
+                var subObjectAccessor = this._objectAccessor.getChildObjectAccessor(field);
+                subObjectList = toArray(subObjectList);
+                for (var i = 0; i < subObjectList.length; i++) {
+                    var subObj = subObjectList[i];
+                    if (!subObj) {
+                        continue;
+                    }
+                    result = result.concat(this._collectValuesThroughAggregate(subObj, subPath));
+                }
+                return result;
+            } else {
+                return [this._objectAccessor.getValue(obj, path)];
+            }
         }
     };
 
