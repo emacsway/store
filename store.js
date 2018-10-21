@@ -1204,18 +1204,7 @@ function namespace(root) {
                 customOrder.indexOf(this._objectAccessor.getValue(rightObj, field))
             );
         },
-        _toClause: function(operand) {
-            var clause = {};
-            if (typeof operand === "string") {
-                if (operand.substring(0, 1) === "-") {
-                    clause[operand.substring(1)] = -1;
-                } else {
-                    clause[operand] = 1;
-                }
-                return clause;
-            }
-            return operand;
-        },
+        _toClause: toOrderClause,
         _getMinValue: function(obj, path) {
             return Math.min.apply(Math, this._collectValuesThroughAggregate(obj, path));
         },
@@ -1244,6 +1233,21 @@ function namespace(root) {
             }
         }
     };
+
+
+    function toOrderClause(operand) {
+        var clause = {};
+        if (typeof operand === "string") {
+            if (operand.substring(0, 1) === "-") {
+                clause[operand.substring(1)] = -1;
+            } else {
+                clause[operand] = 1;
+            }
+            return clause;
+        }
+        return operand;
+    };
+
 
     function QueryDjangoSerializer() {
         AbstractQueryEngine.call(this);
