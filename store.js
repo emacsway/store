@@ -1135,7 +1135,7 @@ function namespace(root) {
         return collection;
     }, {indexable: true, precedence: 0});
     queryCollectionFilter.register('$orderby', function(operands, objectAccessor, collection) {
-        return collection;
+        return new Orderby(operands, objectAccessor, collection).compute();
     }, {indexable: true, compound: true, precedence: 90});
     queryCollectionFilter.register('$offset', function(value, objectAccessor, collection) {
         return Array.prototype.slice.call(collection, value);
@@ -1144,6 +1144,75 @@ function namespace(root) {
         return Array.prototype.slice.call(collection, 0, value);
     }, {indexable: true, precedence: 70});
 
+
+    /*
+     * @constructor
+     * @param {(string | Object)[]} operands
+     * @param {ObjectAccessor} objectAccessor
+     * @param {Array} collection
+     */
+    function Orderby(operands, objectAccessor, collection) {
+        var self = this;
+		this._operands = toArray(operands).map(function(operand) {
+            return self._toClause(operand);
+        });
+        this._objectAccessor = objectAccessor;
+        this._collection = collection;
+	}
+    Orderby.prototype = {
+        constructor: Orderby,
+        compute: function () {
+            var collection = Array.prototype.slice.call(this._collection);
+            collection.sort((leftObj, rightObj) => {
+                for (var i = 0; i < this._operands.length; i++) {
+                    var result;
+                    var operand = this._operands[i];
+                    var field = keys(operand)[0];
+                    if (operand[field] === -1) {
+                        result = this._compareDesc(field, leftObj, rightObj);
+                    } else if (operand[field] === 1) {
+                        result = this._compareAsc(field, leftObj, rightObj);
+                    } else if (operand[field] instanceof Array) {
+                        result = this._compareCustom(field, operand[field], leftObj, rightObj);
+                    }
+                    if (result !== 0) {
+                        return result;
+                    }
+                }
+                return 0;
+            });
+            return collection;
+        },
+        _compareAsc: function(field, leftObj, rightObj) {
+            if (this._objectAccessor.getValue(leftObj, field) < this._objectAccessor.getValue(rightObj, field)) {
+                return -1;
+            } else if (this._objectAccessor.getValue(leftObj, field) > this._objectAccessor.getValue(rightObj, field)) {
+                return 1;
+            }
+            return 0;
+        },
+        _compareDesc: function(field, leftObj, rightObj) {
+            return this._compareAsc(field, rightObj, leftObj);
+        },
+        _compareCustom: function(field, customOrder, leftObj, rightObj) {
+            return (
+                customOrder.indexOf(this._objectAccessor.getValue(leftObj, field)) -
+                customOrder.indexOf(this._objectAccessor.getValue(rightObj, field))
+            );
+        },
+        _toClause: function(operand) {
+            var clause = {};
+            if (typeof operand === "string") {
+                if (operand.substring(0, 1) === "-") {
+                    clause[operand.substring(1)] = -1;
+                } else {
+                    clause[operand] = 1;
+                }
+                return clause;
+            }
+            return operand;
+        }
+    };
 
     function DjangoFilterQueryEngine() {
         AbstractQueryEngine.call(this);
@@ -2616,7 +2685,7 @@ function namespace(root) {
                     type: 'POST',
                     dataType: 'json',
                     contentType: 'application/json',
-                    data: self._serialize(self._mapper.unload(obj)),
+                    data: self._serialize(self._mapper.dump(obj)),
                     success: function(response) {
                         resolve(response);
                     },
@@ -2638,7 +2707,7 @@ function namespace(root) {
                     type: 'PUT',
                     dataType: 'json',
                     contentType: 'application/json',
-                    data: self._serialize(self._mapper.unload(obj)),
+                    data: self._serialize(self._mapper.dump(obj)),
                     success: function(response) {
                         resolve(response);
                     },
@@ -2782,7 +2851,7 @@ function namespace(root) {
                 }
             }
         },
-        unload: function(obj) {
+        dump: function(obj) {
             var record = {};
             for (var key in obj) {
                 if (obj.hasOwnProperty(key)) {

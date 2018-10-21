@@ -3,6 +3,13 @@ const store = require('../../../../store');
 const { assert } = intern.getPlugin('chai');
 const { registerSuite } = intern.getPlugin('interface.object');
 
+/*
+ * @constructor
+ * @param {number} id
+ * @param {number} a
+ * @param {TestModel[]} b
+ * @param {TestModel} c
+ */
 function TestModel (id, a, b, c) {
     this.id = id;
     this.a = a;
