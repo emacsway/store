@@ -932,9 +932,9 @@ function namespace(root) {
                 indexable: false,
                 compound: false
             });
-            for (var i in properties) {
-                if (properties.hasOwnProperty(i)) {
-                    operatorCallable[i] = properties[i];
+            for (var property in properties) {
+                if (properties.hasOwnProperty(property)) {
+                    operatorCallable[property] = properties[property];
                 }
             }
             this._operators[operatorName] = operatorCallable;
@@ -946,32 +946,32 @@ function namespace(root) {
         has: function(operatorName) {
             return operatorName in this._operators;
         },
+        hasOwn: function(operatorName) {
+            return operatorName in this._operators;
+        },
         isCompound: function(operatorName) {
             return this._operators[operatorName].compound;
         },
         isIndexable: function(operatorName) {
-            return this._operators[operatorName].indexable;
-        },
-        execute: function(query, objectAccessor, context) {
-            throw Error("Not Implemented Error!");
+            return this._operators && this._operators[operatorName].indexable;
         }
     };
 
 
-    function SimpleQueryEngine() {
+    function QueryObjectFilter() {
         AbstractQueryEngine.call(this);
     }
-    SimpleQueryEngine.prototype = clone({
-        constructor: SimpleQueryEngine,
-        execute: function(query, objectAccessor, context) {
+    QueryObjectFilter.prototype = clone({
+        constructor: QueryObjectFilter,
+        execute: function(query, objectAccessor, obj) {
             var result = true;
             for (var left in query) {
                 if (isSpecialAttr(left)) { continue; }
                 var right = query[left];
-                if (this.has(left)) {
-                    result = result && this.get(left).call(this, right, objectAccessor, context);
+                if (this.hasOwn(left)) {
+                    result = result && this.get(left).call(this, right, objectAccessor, obj);
                 } else {
-                    result = result && this._executeRight(left, right, objectAccessor, context);
+                    result = result && this._executeRight(left, right, objectAccessor, obj);
                 }
                 if (!result) {
                     return result;
@@ -979,60 +979,48 @@ function namespace(root) {
             }
             return result;
         },
-        _executeRight: function(left, right, objectAccessor, context) {
+        _executeRight: function(left, right, objectAccessor, obj) {
             var result = true;
             for (var key in right) {
-                result = result && this._lookupThroughAggregate(left, key, right[key], objectAccessor, context);
+                result = result && this._lookupThroughAggregate(left, key, right[key], objectAccessor, obj);
                 if (!result) {
                     return result;
                 }
             }
             return result;
         },
-        _lookupThroughAggregate: function(path, op, required, objectAccessor, context) {
+        _lookupThroughAggregate: function(path, op, requiredValue, objectAccessor, obj) {
             if (path.indexOf('.') !== -1) {
                 var result = false;
                 var pathParts = path.split('.');
                 var field = pathParts.shift();
                 var subPath = pathParts.join('.');
-                var subContexts = objectAccessor.getValue(context, field);
-                subContexts = toArray(subContexts);
-                for (var i = 0; i < subContexts.length; i++) {
-                    var subContext = subContexts[i];
-                    if (!subContext) {
+                var subObjectList = objectAccessor.getValue(obj, field);
+                var subObjectAccessor = objectAccessor.getChildObjectAccessor(field);
+                subObjectList = toArray(subObjectList);
+                for (var i = 0; i < subObjectList.length; i++) {
+                    var subObj = subObjectList[i];
+                    if (!subObj) {
                         continue;
                     }
-                    result = result || this._lookupThroughAggregate(subPath, op, required, objectAccessor, subContext);
+                    result = result || this._lookupThroughAggregate(
+                        subPath, op, requiredValue, subObjectAccessor, subObj
+                    );
                     if (result) {
                         return result;
                     }
                 }
                 return result;
             } else {
-                return this.get(op).call(this, [path, required], objectAccessor, context);
+                return this.get(op).call(this, [path, requiredValue], objectAccessor, obj);
             }
         }
     }, Object.create(AbstractQueryEngine.prototype));
 
 
-    var simpleQueryEngine = new SimpleQueryEngine();
+    var queryObjectFilter = new QueryObjectFilter();
 
-    simpleQueryEngine.register('$query', function(operands, objectAccessor, obj) {
-        return this.execute(operands, objectAccessor, obj);
-    }, {indexable: true});
-    simpleQueryEngine.register('$subjects', function(operands, objectAccessor, obj) {
-        return true;
-    }, {indexable: true});
-    simpleQueryEngine.register('$orderby', function(operands, objectAccessor, obj) {
-        return true;
-    }, {indexable: true, compound: true});
-    simpleQueryEngine.register('$limit', function(operands, objectAccessor, obj) {
-        return true;
-    }, {indexable: true});
-    simpleQueryEngine.register('$offset', function(operands, objectAccessor, obj) {
-        return true;
-    }, {indexable: true});
-    simpleQueryEngine.register('$and', function(operands, objectAccessor, obj) {
+    queryObjectFilter.register('$and', function(operands, objectAccessor, obj) {
         var result = true;
         for (var i = 0; i < operands.length; i++) {
             result = result && this.execute(operands[i], objectAccessor, obj);
@@ -1042,7 +1030,7 @@ function namespace(root) {
         };
         return result;
     }, {indexable: true, compound: true});
-    simpleQueryEngine.register('$or', function(operands, objectAccessor, obj) {
+    queryObjectFilter.register('$or', function(operands, objectAccessor, obj) {
         var result = false;
         for (var i = 0; i < operands.length; i++) {
             result = result || this.execute(operands[i], objectAccessor, obj);
@@ -1052,7 +1040,7 @@ function namespace(root) {
         };
         return result;
     }, {compound: true});
-    simpleQueryEngine.register('$in', function(operands, objectAccessor, obj) {
+    queryObjectFilter.register('$in', function(operands, objectAccessor, obj) {
         var result = false,
             field = operands[0],
             values = operands[1];
@@ -1064,17 +1052,17 @@ function namespace(root) {
         }
         return result;
     });
-    simpleQueryEngine.register('$eq', function(operands, objectAccessor, obj) {
+    queryObjectFilter.register('$eq', function(operands, objectAccessor, obj) {
         var field = operands[0],
             value = operands[1];
-        return objectAccessor.getValue(obj, field) == value;
+        return objectAccessor.getValue(obj, field) === value;
     }, {indexable: true});
-    simpleQueryEngine.register('$ne', function(operands, objectAccessor, obj) {
+    queryObjectFilter.register('$ne', function(operands, objectAccessor, obj) {
         var field = operands[0],
             value = operands[1];
-        return objectAccessor.getValue(obj, field) != value;
+        return objectAccessor.getValue(obj, field) !== value;
     });
-    simpleQueryEngine.register('$callable', function(operands, objectAccessor, obj) {
+    queryObjectFilter.register('$callable', function(operands, objectAccessor, obj) {
         if (typeof operands === "function") {
             var func = operands;
             return func(obj);
@@ -1085,65 +1073,241 @@ function namespace(root) {
     });
 
 
-    function DjangoFilterQueryEngine() {
+    function QueryCollectionFilter(queryObjectFilter) {
+        AbstractQueryEngine.call(this);
+        this.queryObjectFilter = queryObjectFilter;
+    }
+    QueryCollectionFilter.prototype = clone({
+        constructor: QueryCollectionFilter,
+        get: function(operatorName) {
+            return (
+                this.hasOwn(operatorName) ?
+                AbstractQueryEngine.prototype.get.call(this, operatorName) :
+                this.queryObjectFilter.get(operatorName)
+            );
+        },
+        has: function(operatorName) {
+            return (
+                this.hasOwn(operatorName) ||
+                this.queryObjectFilter.has(operatorName)
+            );
+        },
+        isCompound: function(operatorName) {
+            return (
+                this.hasOwn(operatorName) ?
+                AbstractQueryEngine.prototype.isCompound.call(this, operatorName) :
+                this.queryObjectFilter.isCompound(operatorName)
+            );
+        },
+        isIndexable: function(operatorName) {
+            return (
+                this.hasOwn(operatorName) ?
+                AbstractQueryEngine.prototype.isCompound.call(this, operatorName) :
+                this.queryObjectFilter.isCompound(operatorName)
+            );
+        },
+        execute: function(query, objectAccessor, collection) {
+            var self = this;
+            var operators = keys(this._operators).sort(function(left, right) {
+                return self._operators[right].precedence - self._operators[left].precedence;
+            });
+            return operators.reduce(function(collection, operator) {
+                return (
+                    operator in query ?
+                    self._operators[operator].call(self, query[operator], objectAccessor, collection) :
+                    collection
+                );
+            }, collection);
+        }
+    }, Object.create(AbstractQueryEngine.prototype));
+
+
+    var queryCollectionFilter = new QueryCollectionFilter(queryObjectFilter);
+
+    queryCollectionFilter.register('$query', function(query, objectAccessor, collection) {
+        var filter = this.queryObjectFilter;
+        return Array.prototype.filter.call(collection, function(obj) {
+            return filter.execute(query, objectAccessor, obj);
+        });
+    }, {indexable: true, precedence: 100});
+    queryCollectionFilter.register('$subjects', function(operands, objectAccessor, collection) {
+        return collection;
+    }, {indexable: true, precedence: 0});
+    queryCollectionFilter.register('$orderby', function(operands, objectAccessor, collection) {
+        return new Orderby(operands, objectAccessor, collection).compute();
+    }, {indexable: true, compound: true, precedence: 90});
+    queryCollectionFilter.register('$offset', function(value, objectAccessor, collection) {
+        return Array.prototype.slice.call(collection, value);
+    }, {indexable: true, precedence: 80});
+    queryCollectionFilter.register('$limit', function(value, objectAccessor, collection) {
+        return Array.prototype.slice.call(collection, 0, value);
+    }, {indexable: true, precedence: 70});
+
+
+    /*
+     * @constructor
+     * @param {(string | Object)[]} operands
+     * @param {ObjectAccessor} objectAccessor
+     * @param {Array} collection
+     */
+    function Orderby(operands, objectAccessor, collection) {
+        var self = this;
+		this._operands = toArray(operands).map(function(operand) {
+            return self._toClause(operand);
+        });
+        this._objectAccessor = objectAccessor;
+        this._collection = collection;
+	}
+    Orderby.prototype = {
+        constructor: Orderby,
+        compute: function () {
+            var collection = Array.prototype.slice.call(this._collection);
+            collection.sort((leftObj, rightObj) => {
+                for (var i = 0; i < this._operands.length; i++) {
+                    var result;
+                    var operand = this._operands[i];
+                    var field = keys(operand)[0];
+                    if (operand[field] === -1) {
+                        result = this._compareDesc(field, leftObj, rightObj);
+                    } else if (operand[field] === 1) {
+                        result = this._compareAsc(field, leftObj, rightObj);
+                    } else if (operand[field] instanceof Array) {
+                        result = this._compareCustom(field, operand[field], leftObj, rightObj);
+                    }
+                    if (result !== 0) {
+                        return result;
+                    }
+                }
+                return 0;
+            });
+            return collection;
+        },
+        _compareAsc: function(field, leftObj, rightObj) {
+            if (this._getMinValue(leftObj, field) < this._getMinValue(rightObj, field)) {
+                return -1;
+            } else if (this._getMinValue(leftObj, field) > this._getMinValue(rightObj, field)) {
+                return 1;
+            }
+            return 0;
+        },
+        _compareDesc: function(field, rightObj, leftObj) {
+            if (this._getMaxValue(leftObj, field) < this._getMaxValue(rightObj, field)) {
+                return -1;
+            } else if (this._getMaxValue(leftObj, field) > this._getMaxValue(rightObj, field)) {
+                return 1;
+            }
+            return 0;
+        },
+        _compareCustom: function(field, customOrder, leftObj, rightObj) {
+            return (
+                customOrder.indexOf(this._objectAccessor.getValue(leftObj, field)) -
+                customOrder.indexOf(this._objectAccessor.getValue(rightObj, field))
+            );
+        },
+        _toClause: toOrderClause,
+        _getMinValue: function(obj, path) {
+            return Math.min.apply(Math, this._collectValuesThroughAggregate(obj, path));
+        },
+        _getMaxValue: function(obj, path) {
+            return Math.max.apply(Math, this._collectValuesThroughAggregate(obj, path));
+        },
+        _collectValuesThroughAggregate: function(obj, path) {
+            if (path.indexOf('.') !== -1) {
+                var result = [];
+                var pathParts = path.split('.');
+                var field = pathParts.shift();
+                var subPath = pathParts.join('.');
+                var subObjectList = this._objectAccessor.getValue(obj, field);
+                var subObjectAccessor = this._objectAccessor.getChildObjectAccessor(field);
+                subObjectList = toArray(subObjectList);
+                for (var i = 0; i < subObjectList.length; i++) {
+                    var subObj = subObjectList[i];
+                    if (!subObj) {
+                        continue;
+                    }
+                    result = result.concat(this._collectValuesThroughAggregate(subObj, subPath));
+                }
+                return result;
+            } else {
+                return [this._objectAccessor.getValue(obj, path)];
+            }
+        }
+    };
+
+
+    function toOrderClause(operand) {
+        var clause = {};
+        if (typeof operand === "string") {
+            if (operand.substring(0, 1) === "-") {
+                clause[operand.substring(1)] = -1;
+            } else {
+                clause[operand] = 1;
+            }
+            return clause;
+        }
+        return operand;
+    };
+
+
+    function QueryDjangoSerializer() {
         AbstractQueryEngine.call(this);
     }
-    DjangoFilterQueryEngine.prototype = clone({
-        constructor: DjangoFilterQueryEngine,
-        execute: function(query, objectAccessor, context) {
+    QueryDjangoSerializer.prototype = clone({
+        constructor: QueryDjangoSerializer,
+        execute: function(query, mapper) {
             var result = {};
             for (var left in query) {
                 var right = query[left];
                 if (this.has(left)) {
-                    clone(this.get(left).call(this, right, objectAccessor, context), result);
+                    clone(this.get(left).call(this, right, mapper), result);
                 } else {
-                    clone(this._executeRight(left, right, objectAccessor, context), result);
+                    clone(this._executeRight(left, right, mapper), result);
                 }
             }
             return result;
         },
-        _executeRight: function(left, right, objectAccessor, context) {
+        _executeRight: function(left, right, mapper) {
             var result = {};
             for (var key in right) {
-                clone(this.get(key).call(this, [left, right[key]], objectAccessor, context), result);
+                clone(this.get(key).call(this, [left, right[key]], mapper), result);
             }
             return result;
         }
     }, Object.create(AbstractQueryEngine.prototype));
 
 
-    var djangoFilterQueryEngine = new DjangoFilterQueryEngine();
+    var queryDjangoSerializer = new QueryDjangoSerializer();
 
 
-    djangoFilterQueryEngine.register('$query', function(operands, objectAccessor, obj) {
-        return this.execute(operands, objectAccessor, obj);
+    queryDjangoSerializer.register('$query', function(operands, mapper) {
+        return this.execute(operands, mapper);
     }, {indexable: true});
-    djangoFilterQueryEngine.register('$subjects', function(operands, objectAccessor, obj) {
+    queryDjangoSerializer.register('$subjects', function(operands, mapper) {
         return {};
     }, {indexable: true});
-    djangoFilterQueryEngine.register('$orderby', function(operands, objectAccessor, obj) {
+    queryDjangoSerializer.register('$orderby', function(operands, mapper) {
         return {};
     }, true);
-    djangoFilterQueryEngine.register('$limit', function(operands, objectAccessor, obj) {
+    queryDjangoSerializer.register('$limit', function(operands, mapper) {
         return {};
     }, {indexable: true});
-    djangoFilterQueryEngine.register('$offset', function(operands, objectAccessor, obj) {
+    queryDjangoSerializer.register('$offset', function(operands, mapper) {
         return {};
     }, {indexable: true});
-    djangoFilterQueryEngine.register('$and', function(operands, objectAccessor, context) {
+    queryDjangoSerializer.register('$and', function(operands, mapper) {
         var result = {};
         for (var i in operands) {
-            clone(this.execute(operands[i], objectAccessor, context), result);
+            clone(this.execute(operands[i], mapper), result);
         };
         return result;
     }, {indexable: true, compound: true});
-    djangoFilterQueryEngine.register('$or', function(operands, objectAccessor, context) {
+    queryDjangoSerializer.register('$or', function(operands, mapper) {
         throw Error("Not Supported!");
     }, {compound: true});
-    djangoFilterQueryEngine.register('$callable', function(operands, objectAccessor, context) {
+    queryDjangoSerializer.register('$callable', function(operands, mapper) {
         throw Error("Not Supported!");
     });
-    djangoFilterQueryEngine.register('$eq', function(operands, objectAccessor, context) {
+    queryDjangoSerializer.register('$eq', function(operands, mapper) {
         var result = {},
             field = operands[0],
             value = operands[1];
@@ -1154,7 +1318,7 @@ function namespace(root) {
         result[field] = value;
         return result;
     }, {indexable: true});
-    djangoFilterQueryEngine.register('$ne', function(operands, objectAccessor, context) {
+    queryDjangoSerializer.register('$ne', function(operands, mapper) {
         var result = {},
             field = operands[0],
             value = operands[1];
@@ -1167,11 +1331,11 @@ function namespace(root) {
         result[field] = value;
         return result;
     });
-    djangoFilterQueryEngine.register('$rel', function(operands, objectAccessor, context) {
+    queryDjangoSerializer.register('$rel', function(operands, mapper) {
         var result = {},
             prefix = operands[0],
             subQuery = operands[1];
-        var subResult = this.execute(subQuery, objectAccessor, context);
+        var subResult = this.execute(subQuery, mapper);
         for (i in subResult) {
             result[prefix + '__' + i] = subResult[i];
         }
@@ -1250,6 +1414,9 @@ function namespace(root) {
         },
         getObjectState: function(obj) {
             return clone(obj, {});
+        },
+        getChildObjectAccessor: function(field) {
+            return this;
         },
         pkExists: function(obj) {
             var self = this;
@@ -2303,7 +2470,7 @@ function namespace(root) {
                             return self.find(query);
                         },
                         function(obj) {
-                            return simpleQueryEngine.execute(query, self.getObjectAccessor(), obj);
+                            return queryObjectFilter.execute(query['$query'], self.getObjectAccessor(), obj);
                         },
                         objectList,
                         query['$subjects']
@@ -2381,7 +2548,7 @@ function namespace(root) {
     }
     MemoryStore.prototype = clone({
         constructor: MemoryStore,
-        _queryEngine: simpleQueryEngine,
+        _queryEngine: queryCollectionFilter,
         addIndex: function(index) {
             if (!(index in this.indexes)) {
                 this.indexes[index] = {};
@@ -2431,9 +2598,7 @@ function namespace(root) {
         _find: function(query, options) {
             var self = this;
             var initObjectList = self._getInitObjectList(query);
-            return initObjectList.filter(function(obj) {
-                return !query['$query'] || self._queryEngine.execute(query, self.getObjectAccessor(), obj);
-            });
+            return this._queryEngine.execute(query, this.getObjectAccessor(), initObjectList);
         },
         _getInitObjectList: function(query) {
             return new GetInitObjectList(this._queryEngine, query, this).compute();
@@ -2503,7 +2668,7 @@ function namespace(root) {
     }
     RestStore.prototype = clone({
         constructor: RestStore,
-        _queryEngine: djangoFilterQueryEngine,
+        _queryEngine: queryDjangoSerializer,
         _get: function(pk) {
             var self = this;
             return new Promise(function(resolve, reject) {
@@ -2527,11 +2692,12 @@ function namespace(root) {
         _find: function(query, options) {
             var self = this;
             typeof query === "undefined" && (query = {});
+            var serializedQuery = this._queryEngine.execute(query, this._mapper);
             return new Promise(function(resolve, reject) {
                 self._jQuery.ajax(clone(self._requestOptions, {
                     url: self._getUrl(),
                     type: 'GET',
-                    data: query,
+                    data: serializedQuery,
                     success: function(objectList) {
                         resolve(objectList);
                     },
@@ -2555,7 +2721,7 @@ function namespace(root) {
                     type: 'POST',
                     dataType: 'json',
                     contentType: 'application/json',
-                    data: self._serialize(self._mapper.unload(obj)),
+                    data: self._serialize(self._mapper.dump(obj)),
                     success: function(response) {
                         resolve(response);
                     },
@@ -2577,7 +2743,7 @@ function namespace(root) {
                     type: 'PUT',
                     dataType: 'json',
                     contentType: 'application/json',
-                    data: self._serialize(self._mapper.unload(obj)),
+                    data: self._serialize(self._mapper.dump(obj)),
                     success: function(response) {
                         resolve(response);
                     },
@@ -2679,6 +2845,31 @@ function namespace(root) {
     };
 
 
+    function Field(name, column, load, dump) {
+        this._name = name;
+        this._column = column || name;
+        load && (this.load = load);
+        dump && (this.load = dump);
+    }
+    Field.prototype = {
+        getName: function() {
+            return this._name;
+        },
+        load: function(record) {
+            return record[this._column];
+        },
+        // Don't use tuple for support cases like new Point(x, y) -> {x: x, y: y}
+        dump: function(value) {
+            var record = {};
+            record[this._column] = value;
+            return record;
+        },
+        loadError: function(error) {
+            return error[this._column];
+        }
+    };
+
+
     function Mapper(options) {
         options = options || {};
         this._model = options.model || DefaultModel;
@@ -2721,7 +2912,7 @@ function namespace(root) {
                 }
             }
         },
-        unload: function(obj) {
+        dump: function(obj) {
             var record = {};
             for (var key in obj) {
                 if (obj.hasOwnProperty(key)) {
@@ -2729,6 +2920,15 @@ function namespace(root) {
                 }
             }
             return record;
+        },
+        loadError: function(error) {
+            return error;  // TODO: implement me
+        },
+        // Don't use tuple for support cases like new Point(x, y) -> {x: x, y: y}
+        dumpFieldValue: function(field, value) {
+            var result = {};
+            result[field] = value;
+            return result;  // TODO: implement me
         },
         isLoaded: function(recordOrObj) {
             return recordOrObj instanceof this._model;
@@ -3717,11 +3917,14 @@ function namespace(root) {
 
     return {
         Store: Store,
+        ObjectAccessor: ObjectAccessor,
         AbstractQueryEngine: AbstractQueryEngine,
-        SimpleQueryEngine: SimpleQueryEngine,
-        simpleQueryEngine: simpleQueryEngine,
-        DjangoFilterQueryEngine: DjangoFilterQueryEngine,
-        djangoFilterQueryEngine: djangoFilterQueryEngine,
+        QueryCollectionFilter: QueryCollectionFilter,
+        QueryObjectFilter: QueryObjectFilter,
+        queryObjectFilter: queryObjectFilter,
+        queryCollectionFilter: queryCollectionFilter,
+        QueryDjangoSerializer: QueryDjangoSerializer,
+        queryDjangoSerializer: queryDjangoSerializer,
         PkRequired: PkRequired,
         ObjectAlreadyAdded: ObjectAlreadyAdded,
         Registry: Registry,

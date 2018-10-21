@@ -1,0 +1,5 @@
+{
+  "basePath": ".",
+  "suites": "./tests/unit/**/*.js",
+  "debug": true
+}

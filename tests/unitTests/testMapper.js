@@ -21,7 +21,7 @@ define(['../../store', '../utils'], function(store, utils) {
         assert(typeof obj.column1 === "undefined");
         assert(obj.column2 === 3);
 
-        var record = mapper.unload(obj);
+        var record = mapper.dump(obj);
         assert(typeof record.alias1 === "undefined");
         assert(record.column1 === 2);
         assert(record.column2 === 3);
