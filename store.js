@@ -1310,7 +1310,6 @@ function namespace(root) {
     queryDjangoSerializer.register('$eq', function(operands, mapper) {
         var result = {},
             record = mapper.dumpFieldValue(operands[0], operands[1]);
-        console.log(record);
         for (var field in record) {
             var value = record[field];
             if (typeof value === "undefined" || value === null) {
