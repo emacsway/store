@@ -1286,7 +1286,16 @@ function namespace(root) {
         return {};
     }, {indexable: true});
     queryDjangoSerializer.register('$orderby', function(operands, mapper) {
-        return {};
+        var clauses = toArray(operands).map(toOrderClause);
+        var result = {};
+        return clauses.reduce(function(accum, clause) {
+            var result = clone(accum, {});
+            var field = keys(clause)[0];
+            var direction = clause[field];
+            // TODO: Map fieldName
+            result[field] = direction;
+            return result;
+        }, {});
     }, true);
     queryDjangoSerializer.register('$limit', function(operands, mapper) {
         return {};
@@ -2853,27 +2862,28 @@ function namespace(root) {
     };
 
 
-    function Field(name, column, load, dump) {
+    // Don't use recordName, because one field can be composed by a few fields
+    function Field(name, load, dump, loadError) {
         this._name = name;
-        this._column = column || name;
         load && (this.load = load);
         dump && (this.load = dump);
+        loadError && (this.loadError = loadError);
     }
     Field.prototype = {
         getName: function() {
             return this._name;
         },
         load: function(record) {
-            return record[this._column];
+            return record[this._name];
         },
         // Don't use tuple for support cases like new Point(x, y) -> {x: x, y: y}
         dump: function(value) {
             var record = {};
-            record[this._column] = value;
+            record[this._name] = value;
             return record;
         },
         loadError: function(error) {
-            return error[this._column];
+            return error[this._name];
         }
     };
 
