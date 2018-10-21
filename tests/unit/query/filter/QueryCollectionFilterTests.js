@@ -35,12 +35,12 @@ const TEST_COLLECTION = [
 		new TestModel(31, 21),
 		new TestModel(32, 32),
 		new TestModel(33, 33)
-	], new TestModel(34, 34)),
+	], new TestModel(34, 44)),
 	new TestModel(4, 5, 4, [
 		new TestModel(41, 41),
 		new TestModel(42, 42),
 		new TestModel(43, 53)
-	], new TestModel(44, 44)),
+	], new TestModel(44, 34)),
 	new TestModel(5, 4, 4, [
 		new TestModel(51, 51),
 		new TestModel(52, 52),
@@ -107,6 +107,18 @@ registerSuite('QueryCollectionFilter', () => {
                         "$orderby": "-nestedCollection.a"
                     }, objectAccessor, TEST_COLLECTION);
                     assert.deepEqual(result.map((obj) => obj.id), [4, 5, 3, 2, 1]);
+                },
+                'sorted by ascending for nested object field'() {
+                    var result = queryCollectionFilter.execute({
+                        "$orderby": "nestedObject.a"
+                    }, objectAccessor, TEST_COLLECTION);
+                    assert.deepEqual(result.map((obj) => obj.id), [1, 2, 4, 3, 5]);
+                },
+                'sorted by descending for nested object field'() {
+                    var result = queryCollectionFilter.execute({
+                        "$orderby": "-nestedObject.a"
+                    }, objectAccessor, TEST_COLLECTION);
+                    assert.deepEqual(result.map((obj) => obj.id), [5, 3, 4, 2, 1]);
                 }
             }
         },
