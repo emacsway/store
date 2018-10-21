@@ -1339,6 +1339,10 @@ function namespace(root) {
         var result = {},
             prefix = operands[0],
             subQuery = operands[1];
+        // TODO: delegate execution to related mapper?
+        // Use PrepareRelationalQuery._visitors.emulatedRelation for it?
+        // But relaton is not a part of Record!
+        // Thus, leave it as it is.
         var subResult = this.execute(subQuery, mapper);
         for (i in subResult) {
             result[prefix + '__' + i] = subResult[i];
