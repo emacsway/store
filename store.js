@@ -954,9 +954,6 @@ function namespace(root) {
         },
         isIndexable: function(operatorName) {
             return this._operators && this._operators[operatorName].indexable;
-        },
-        execute: function(query, objectAccessor, context) {
-            throw Error("Not Implemented Error!");
         }
     };
 
@@ -966,15 +963,15 @@ function namespace(root) {
     }
     QueryObjectFilter.prototype = clone({
         constructor: QueryObjectFilter,
-        execute: function(query, objectAccessor, context) {
+        execute: function(query, objectAccessor, obj) {
             var result = true;
             for (var left in query) {
                 if (isSpecialAttr(left)) { continue; }
                 var right = query[left];
                 if (this.hasOwn(left)) {
-                    result = result && this.get(left).call(this, right, objectAccessor, context);
+                    result = result && this.get(left).call(this, right, objectAccessor, obj);
                 } else {
-                    result = result && this._executeRight(left, right, objectAccessor, context);
+                    result = result && this._executeRight(left, right, objectAccessor, obj);
                 }
                 if (!result) {
                     return result;
@@ -982,23 +979,23 @@ function namespace(root) {
             }
             return result;
         },
-        _executeRight: function(left, right, objectAccessor, context) {
+        _executeRight: function(left, right, objectAccessor, obj) {
             var result = true;
             for (var key in right) {
-                result = result && this._lookupThroughAggregate(left, key, right[key], objectAccessor, context);
+                result = result && this._lookupThroughAggregate(left, key, right[key], objectAccessor, obj);
                 if (!result) {
                     return result;
                 }
             }
             return result;
         },
-        _lookupThroughAggregate: function(path, op, required, objectAccessor, context) {
+        _lookupThroughAggregate: function(path, op, required, objectAccessor, obj) {
             if (path.indexOf('.') !== -1) {
                 var result = false;
                 var pathParts = path.split('.');
                 var field = pathParts.shift();
                 var subPath = pathParts.join('.');
-                var subContexts = objectAccessor.getValue(context, field);
+                var subContexts = objectAccessor.getValue(obj, field);
                 var subObjectAccessor = objectAccessor.getChildObjectAccessor(field);
                 subContexts = toArray(subContexts);
                 for (var i = 0; i < subContexts.length; i++) {
@@ -1013,7 +1010,7 @@ function namespace(root) {
                 }
                 return result;
             } else {
-                return this.get(op).call(this, [path, required], objectAccessor, context);
+                return this.get(op).call(this, [path, required], objectAccessor, obj);
             }
         }
     }, Object.create(AbstractQueryEngine.prototype));
@@ -1107,7 +1104,7 @@ function namespace(root) {
                 this.queryObjectFilter.isCompound(operatorName)
             );
         },
-        execute: function(query, objectAccessor, context) {
+        execute: function(query, objectAccessor, collection) {
             var self = this;
             var operators = keys(this._operators).sort(function(left, right) {
                 return self._operators[right].precedence - self._operators[left].precedence;
@@ -1118,7 +1115,7 @@ function namespace(root) {
                     self._operators[operator].call(self, query[operator], objectAccessor, collection) :
                     collection
                 );
-            }, context);
+            }, collection);
         }
     }, Object.create(AbstractQueryEngine.prototype));
 
@@ -1219,22 +1216,22 @@ function namespace(root) {
     }
     DjangoFilterQueryEngine.prototype = clone({
         constructor: DjangoFilterQueryEngine,
-        execute: function(query, objectAccessor, context) {
+        execute: function(query, mapper) {
             var result = {};
             for (var left in query) {
                 var right = query[left];
                 if (this.has(left)) {
-                    clone(this.get(left).call(this, right, objectAccessor, context), result);
+                    clone(this.get(left).call(this, right, mapper), result);
                 } else {
-                    clone(this._executeRight(left, right, objectAccessor, context), result);
+                    clone(this._executeRight(left, right, mapper), result);
                 }
             }
             return result;
         },
-        _executeRight: function(left, right, objectAccessor, context) {
+        _executeRight: function(left, right, mapper) {
             var result = {};
             for (var key in right) {
-                clone(this.get(key).call(this, [left, right[key]], objectAccessor, context), result);
+                clone(this.get(key).call(this, [left, right[key]], mapper), result);
             }
             return result;
         }
@@ -1244,35 +1241,35 @@ function namespace(root) {
     var djangoFilterQueryEngine = new DjangoFilterQueryEngine();
 
 
-    djangoFilterQueryEngine.register('$query', function(operands, objectAccessor, obj) {
-        return this.execute(operands, objectAccessor, obj);
+    djangoFilterQueryEngine.register('$query', function(operands, mapper) {
+        return this.execute(operands, mapper);
     }, {indexable: true});
-    djangoFilterQueryEngine.register('$subjects', function(operands, objectAccessor, obj) {
+    djangoFilterQueryEngine.register('$subjects', function(operands, mapper) {
         return {};
     }, {indexable: true});
-    djangoFilterQueryEngine.register('$orderby', function(operands, objectAccessor, obj) {
+    djangoFilterQueryEngine.register('$orderby', function(operands, mapper) {
         return {};
     }, true);
-    djangoFilterQueryEngine.register('$limit', function(operands, objectAccessor, obj) {
+    djangoFilterQueryEngine.register('$limit', function(operands, mapper) {
         return {};
     }, {indexable: true});
-    djangoFilterQueryEngine.register('$offset', function(operands, objectAccessor, obj) {
+    djangoFilterQueryEngine.register('$offset', function(operands, mapper) {
         return {};
     }, {indexable: true});
-    djangoFilterQueryEngine.register('$and', function(operands, objectAccessor, context) {
+    djangoFilterQueryEngine.register('$and', function(operands, mapper) {
         var result = {};
         for (var i in operands) {
-            clone(this.execute(operands[i], objectAccessor, context), result);
+            clone(this.execute(operands[i], mapper), result);
         };
         return result;
     }, {indexable: true, compound: true});
-    djangoFilterQueryEngine.register('$or', function(operands, objectAccessor, context) {
+    djangoFilterQueryEngine.register('$or', function(operands, mapper) {
         throw Error("Not Supported!");
     }, {compound: true});
-    djangoFilterQueryEngine.register('$callable', function(operands, objectAccessor, context) {
+    djangoFilterQueryEngine.register('$callable', function(operands, mapper) {
         throw Error("Not Supported!");
     });
-    djangoFilterQueryEngine.register('$eq', function(operands, objectAccessor, context) {
+    djangoFilterQueryEngine.register('$eq', function(operands, mapper) {
         var result = {},
             field = operands[0],
             value = operands[1];
@@ -1283,7 +1280,7 @@ function namespace(root) {
         result[field] = value;
         return result;
     }, {indexable: true});
-    djangoFilterQueryEngine.register('$ne', function(operands, objectAccessor, context) {
+    djangoFilterQueryEngine.register('$ne', function(operands, mapper) {
         var result = {},
             field = operands[0],
             value = operands[1];
@@ -1296,11 +1293,11 @@ function namespace(root) {
         result[field] = value;
         return result;
     });
-    djangoFilterQueryEngine.register('$rel', function(operands, objectAccessor, context) {
+    djangoFilterQueryEngine.register('$rel', function(operands, mapper) {
         var result = {},
             prefix = operands[0],
             subQuery = operands[1];
-        var subResult = this.execute(subQuery, objectAccessor, context);
+        var subResult = this.execute(subQuery, mapper);
         for (i in subResult) {
             result[prefix + '__' + i] = subResult[i];
         }
