@@ -1245,11 +1245,11 @@ function namespace(root) {
         }
     };
 
-    function DjangoFilterQueryEngine() {
+    function QueryDjangoSerializer() {
         AbstractQueryEngine.call(this);
     }
-    DjangoFilterQueryEngine.prototype = clone({
-        constructor: DjangoFilterQueryEngine,
+    QueryDjangoSerializer.prototype = clone({
+        constructor: QueryDjangoSerializer,
         execute: function(query, mapper) {
             var result = {};
             for (var left in query) {
@@ -1272,38 +1272,38 @@ function namespace(root) {
     }, Object.create(AbstractQueryEngine.prototype));
 
 
-    var djangoFilterQueryEngine = new DjangoFilterQueryEngine();
+    var queryDjangoSerializer = new QueryDjangoSerializer();
 
 
-    djangoFilterQueryEngine.register('$query', function(operands, mapper) {
+    queryDjangoSerializer.register('$query', function(operands, mapper) {
         return this.execute(operands, mapper);
     }, {indexable: true});
-    djangoFilterQueryEngine.register('$subjects', function(operands, mapper) {
+    queryDjangoSerializer.register('$subjects', function(operands, mapper) {
         return {};
     }, {indexable: true});
-    djangoFilterQueryEngine.register('$orderby', function(operands, mapper) {
+    queryDjangoSerializer.register('$orderby', function(operands, mapper) {
         return {};
     }, true);
-    djangoFilterQueryEngine.register('$limit', function(operands, mapper) {
+    queryDjangoSerializer.register('$limit', function(operands, mapper) {
         return {};
     }, {indexable: true});
-    djangoFilterQueryEngine.register('$offset', function(operands, mapper) {
+    queryDjangoSerializer.register('$offset', function(operands, mapper) {
         return {};
     }, {indexable: true});
-    djangoFilterQueryEngine.register('$and', function(operands, mapper) {
+    queryDjangoSerializer.register('$and', function(operands, mapper) {
         var result = {};
         for (var i in operands) {
             clone(this.execute(operands[i], mapper), result);
         };
         return result;
     }, {indexable: true, compound: true});
-    djangoFilterQueryEngine.register('$or', function(operands, mapper) {
+    queryDjangoSerializer.register('$or', function(operands, mapper) {
         throw Error("Not Supported!");
     }, {compound: true});
-    djangoFilterQueryEngine.register('$callable', function(operands, mapper) {
+    queryDjangoSerializer.register('$callable', function(operands, mapper) {
         throw Error("Not Supported!");
     });
-    djangoFilterQueryEngine.register('$eq', function(operands, mapper) {
+    queryDjangoSerializer.register('$eq', function(operands, mapper) {
         var result = {},
             field = operands[0],
             value = operands[1];
@@ -1314,7 +1314,7 @@ function namespace(root) {
         result[field] = value;
         return result;
     }, {indexable: true});
-    djangoFilterQueryEngine.register('$ne', function(operands, mapper) {
+    queryDjangoSerializer.register('$ne', function(operands, mapper) {
         var result = {},
             field = operands[0],
             value = operands[1];
@@ -1327,7 +1327,7 @@ function namespace(root) {
         result[field] = value;
         return result;
     });
-    djangoFilterQueryEngine.register('$rel', function(operands, mapper) {
+    queryDjangoSerializer.register('$rel', function(operands, mapper) {
         var result = {},
             prefix = operands[0],
             subQuery = operands[1];
@@ -2664,7 +2664,7 @@ function namespace(root) {
     }
     RestStore.prototype = clone({
         constructor: RestStore,
-        _queryEngine: djangoFilterQueryEngine,
+        _queryEngine: queryDjangoSerializer,
         _get: function(pk) {
             var self = this;
             return new Promise(function(resolve, reject) {
@@ -3914,8 +3914,8 @@ function namespace(root) {
         QueryObjectFilter: QueryObjectFilter,
         queryObjectFilter: queryObjectFilter,
         queryCollectionFilter: queryCollectionFilter,
-        DjangoFilterQueryEngine: DjangoFilterQueryEngine,
-        djangoFilterQueryEngine: djangoFilterQueryEngine,
+        QueryDjangoSerializer: QueryDjangoSerializer,
+        queryDjangoSerializer: queryDjangoSerializer,
         PkRequired: PkRequired,
         ObjectAlreadyAdded: ObjectAlreadyAdded,
         Registry: Registry,

@@ -1,7 +1,7 @@
 define([
     '../store',
 
-    './unitTests/testDjangoFilterQueryEngine',
+    './unitTests/testQueryDjangoSerializer',
     './unitTests/testUtils',
     './unitTests/testWhenIter',
     './unitTests/testMapper',

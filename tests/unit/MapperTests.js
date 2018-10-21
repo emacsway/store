@@ -3,6 +3,7 @@ const store = require('../../store');
 const { assert } = intern.getPlugin('chai');
 const { registerSuite } = intern.getPlugin('interface.object');
 
+
 /*
  * @constructor
  * @param {number} x
@@ -12,6 +13,7 @@ function Point(x, y) {
     this.x = x;
     this.y = y;
 }
+
 
 /*
  * @constructor
