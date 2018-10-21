@@ -2995,7 +2995,7 @@ function namespace(root) {
         this._objectAccessor = options.objectAccessor || new ObjectAccessor(options.pk);
         this._reverseMapping = this.makeReverseMapping(this._mapping);
     }
-    Serializer.prototype = {
+    Serializer.prototype = clone({
         constructor: Serializer,
         makeReverseMapping: function(mapping) {
             var reverseMapping = {};
@@ -3064,7 +3064,7 @@ function namespace(root) {
             var self = this;
             keys(record).forEach(function(key) { self._fields[key] = new Field(key); });
         }
-    };
+    }, Object.create(FieldNode.prototype));
 
 
     function Registry(parent) {
