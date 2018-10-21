@@ -1322,15 +1322,17 @@ function namespace(root) {
     }, {indexable: true});
     queryDjangoSerializer.register('$ne', function(operands, mapper) {
         var result = {},
-            field = operands[0],
-            value = operands[1];
-        if (typeof value === "undefined" || value === null) {
-            field += '__isnull';
-            value = false;
-        } else {
-            field += '__ne';
+            record = mapper.dumpFieldValue(operands[0], operands[1]);
+        for (var field in record) {
+            var value = record[field];
+            if (typeof value === "undefined" || value === null) {
+                field += '__isnull';
+                value = false;
+            } else {
+                field += '__ne';
+            }
+            result[field] = value;
         }
-        result[field] = value;
         return result;
     });
     queryDjangoSerializer.register('$rel', function(operands, mapper) {
