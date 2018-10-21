@@ -28,12 +28,12 @@ function TestModel (id, a, point) {
 }
 
 
-registerSuite('Mapper', () => {
-    let mapper;
+registerSuite('Serializer', () => {
+    let serializer;
 
     return {
         beforeEach() {
-            mapper = new store.Mapper({
+            serializer = new store.Serializer({
                 fields: [
                     new store.Field('id'),
                     new store.RenamedField('a', 'aRenamed'),
@@ -48,7 +48,7 @@ registerSuite('Mapper', () => {
         },
         'TestModel': {
             'should map point'() {
-                var obj = mapper.load({
+                var obj = serializer.load({
                     id: 1,
                     aRenamed: 2,
                     x: 5,

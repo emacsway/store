@@ -132,7 +132,7 @@ Store public API
    :param function options.model: the model constructor, which should be applied before to add object into the store.\
        Can be usefull in combination with :func:`Store.prototype.decompose`.\
        Optional. The default value is :class:`DefaultModel`
-   :param Mapper options.mapper: an instance of :class:`Mapper`. Optional.\
+   :param Serializer options.serializer: an instance of :class:`Serializer`. Optional.\
        By default will be created on fly using ``options.model``
    :param Object options.relations: the dictionary describes the schema relations.
 
@@ -185,7 +185,7 @@ Store public API
    In case the foreignKey don't has relatedName key, a new relatedName will be generated from the store name and "Set" suffix.
 
    | If ``options.objectAccessor`` is provided, the ``options.pk`` will be ignored.
-   | If ``options.mapper`` is provided, the ``options.model`` and ``options.objectAccessor`` will be ignored.
+   | If ``options.serializer`` is provided, the ``options.model`` and ``options.objectAccessor`` will be ignored.
    | If ``options.localStorage`` is provided, the ``options.indexes`` will be ignored.
 
    The public method of Store:

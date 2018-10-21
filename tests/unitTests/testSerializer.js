@@ -7,13 +7,13 @@ define(['../../store', '../utils'], function(store, utils) {
         expectOrderedPks = utils.expectOrderedPks;
 
 
-    function testMapper(resolve, reject) {
+    function testSerializer(resolve, reject) {
 
         function Model(attrs) {
             store.clone(attrs, this);
         }
 
-        var mapper = new store.Mapper({
+        var serializer = new store.Serializer({
             model: Model,
             fields: [
                 new store.RenamedField('alias1', 'column1'),
@@ -21,18 +21,18 @@ define(['../../store', '../utils'], function(store, utils) {
             ]
         });
 
-        var obj = mapper.load({column1: 2, column2: 3});
+        var obj = serializer.load({column1: 2, column2: 3});
         assert(obj instanceof Model);
         assert(obj.alias1 === 2);
         assert(typeof obj.column1 === "undefined");
         assert(obj.column2 === 3);
 
-        var record = mapper.dump(obj);
+        var record = serializer.dump(obj);
         assert(typeof record.alias1 === "undefined");
         assert(record.column1 === 2);
         assert(record.column2 === 3);
         resolve();
 
     }
-    return testMapper;
+    return testSerializer;
 });

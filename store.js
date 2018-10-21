@@ -129,8 +129,8 @@ function namespace(root) {
         if (options.remoteStore) {
             this._remoteStore = options.remoteStore;
         } else {
-            if (options.mapper) {
-                var pk = options.mapper.getObjectAccessor().pk;
+            if (options.serializer) {
+                var pk = options.serializer.getObjectAccessor().pk;
             } else if (options.objectAccessor) {
                 var pk = options.objectAccessor.pk;
             } else if (options.pk) {
@@ -1254,22 +1254,22 @@ function namespace(root) {
     }
     QueryDjangoSerializer.prototype = clone({
         constructor: QueryDjangoSerializer,
-        execute: function(query, mapper) {
+        execute: function(query, serializer) {
             var result = {};
             for (var left in query) {
                 var right = query[left];
                 if (this.has(left)) {
-                    clone(this.get(left).call(this, right, mapper), result);
+                    clone(this.get(left).call(this, right, serializer), result);
                 } else {
-                    clone(this._executeRight(left, right, mapper), result);
+                    clone(this._executeRight(left, right, serializer), result);
                 }
             }
             return result;
         },
-        _executeRight: function(left, right, mapper) {
+        _executeRight: function(left, right, serializer) {
             var result = {};
             for (var key in right) {
-                clone(this.get(key).call(this, [left, right[key]], mapper), result);
+                clone(this.get(key).call(this, [left, right[key]], serializer), result);
             }
             return result;
         }
@@ -1279,13 +1279,13 @@ function namespace(root) {
     var queryDjangoSerializer = new QueryDjangoSerializer();
 
 
-    queryDjangoSerializer.register('$query', function(operands, mapper) {
-        return this.execute(operands, mapper);
+    queryDjangoSerializer.register('$query', function(operands, serializer) {
+        return this.execute(operands, serializer);
     }, {indexable: true});
-    queryDjangoSerializer.register('$subjects', function(operands, mapper) {
+    queryDjangoSerializer.register('$subjects', function(operands, serializer) {
         return {};
     }, {indexable: true});
-    queryDjangoSerializer.register('$orderby', function(operands, mapper) {
+    queryDjangoSerializer.register('$orderby', function(operands, serializer) {
         var clauses = toArray(operands).map(toOrderClause);
         var result = {};
         return clauses.reduce(function(accum, clause) {
@@ -1297,28 +1297,28 @@ function namespace(root) {
             return result;
         }, {});
     }, true);
-    queryDjangoSerializer.register('$limit', function(operands, mapper) {
+    queryDjangoSerializer.register('$limit', function(operands, serializer) {
         return {};
     }, {indexable: true});
-    queryDjangoSerializer.register('$offset', function(operands, mapper) {
+    queryDjangoSerializer.register('$offset', function(operands, serializer) {
         return {};
     }, {indexable: true});
-    queryDjangoSerializer.register('$and', function(operands, mapper) {
+    queryDjangoSerializer.register('$and', function(operands, serializer) {
         var result = {};
         for (var i in operands) {
-            clone(this.execute(operands[i], mapper), result);
+            clone(this.execute(operands[i], serializer), result);
         };
         return result;
     }, {indexable: true, compound: true});
-    queryDjangoSerializer.register('$or', function(operands, mapper) {
+    queryDjangoSerializer.register('$or', function(operands, serializer) {
         throw Error("Not Supported!");
     }, {compound: true});
-    queryDjangoSerializer.register('$callable', function(operands, mapper) {
+    queryDjangoSerializer.register('$callable', function(operands, serializer) {
         throw Error("Not Supported!");
     });
-    queryDjangoSerializer.register('$eq', function(operands, mapper) {
+    queryDjangoSerializer.register('$eq', function(operands, serializer) {
         var result = {},
-            record = mapper.dumpFieldValue(operands[0], operands[1]);
+            record = serializer.dumpFieldValue(operands[0], operands[1]);
         for (var field in record) {
             var value = record[field];
             if (typeof value === "undefined" || value === null) {
@@ -1329,9 +1329,9 @@ function namespace(root) {
         }
         return result;
     }, {indexable: true});
-    queryDjangoSerializer.register('$ne', function(operands, mapper) {
+    queryDjangoSerializer.register('$ne', function(operands, serializer) {
         var result = {},
-            record = mapper.dumpFieldValue(operands[0], operands[1]);
+            record = serializer.dumpFieldValue(operands[0], operands[1]);
         for (var field in record) {
             var value = record[field];
             if (typeof value === "undefined" || value === null) {
@@ -1344,15 +1344,15 @@ function namespace(root) {
         }
         return result;
     });
-    queryDjangoSerializer.register('$rel', function(operands, mapper) {
+    queryDjangoSerializer.register('$rel', function(operands, serializer) {
         var result = {},
             prefix = operands[0],
             subQuery = operands[1];
-        // TODO: delegate execution to related mapper?
+        // TODO: delegate execution to related serializer?
         // Use PrepareRelationalQuery._visitors.emulatedRelation for it?
         // But relaton is not a part of Record!
         // Thus, leave it as it is.
-        var subResult = this.execute(subQuery, mapper);
+        var subResult = this.execute(subQuery, serializer);
         for (i in subResult) {
             result[prefix + '__' + i] = subResult[i];
         }
@@ -2407,7 +2407,7 @@ function namespace(root) {
     function AbstractLeafStore(options) {
         AbstractStore.call(this);
         options || (options = {});
-        this._mapper = options.mapper ? options.mapper : new Mapper({
+        this._serializer = options.serializer ? options.serializer : new Serializer({
             model: options.model,
             aspects: options.aspects,
             objectAccessor: options.objectAccessor,
@@ -2423,7 +2423,7 @@ function namespace(root) {
             return this._queryEngine;
         },
         restoreObject: function(record) {
-            var obj = this._mapper.isLoaded(record) ? record : this._mapper.load(record);
+            var obj = this._serializer.isLoaded(record) ? record : this._serializer.load(record);
             return obj;
         },
         getInitObjectState: function(obj) {
@@ -2448,7 +2448,7 @@ function namespace(root) {
             return ++AbstractLeafStore._oidCounter;
         },
         getObjectAccessor: function() {
-            return this._mapper.getObjectAccessor();
+            return this._serializer.getObjectAccessor();
         },
         syncDependencies: function(obj, old) {
         },
@@ -2709,7 +2709,7 @@ function namespace(root) {
         _find: function(query, options) {
             var self = this;
             typeof query === "undefined" && (query = {});
-            var serializedQuery = this._queryEngine.execute(query, this._mapper);
+            var serializedQuery = this._queryEngine.execute(query, this._serializer);
             return new Promise(function(resolve, reject) {
                 self._jQuery.ajax(clone(self._requestOptions, {
                     url: self._getUrl(),
@@ -2738,7 +2738,7 @@ function namespace(root) {
                     type: 'POST',
                     dataType: 'json',
                     contentType: 'application/json',
-                    data: self._serialize(self._mapper.dump(obj)),
+                    data: self._serialize(self._serializer.dump(obj)),
                     success: function(response) {
                         resolve(response);
                     },
@@ -2747,7 +2747,7 @@ function namespace(root) {
                     }
                 }));
             }).then(function(response) {
-                self._mapper.update(response, obj);
+                self._serializer.update(response, obj);
                 self._setInitObjectState(obj);
                 return obj;
             });
@@ -2760,7 +2760,7 @@ function namespace(root) {
                     type: 'PUT',
                     dataType: 'json',
                     contentType: 'application/json',
-                    data: self._serialize(self._mapper.dump(obj)),
+                    data: self._serialize(self._serializer.dump(obj)),
                     success: function(response) {
                         resolve(response);
                     },
@@ -2769,7 +2769,7 @@ function namespace(root) {
                     }
                 }));
             }).then(function(response) {
-                self._mapper.update(response, obj);
+                self._serializer.update(response, obj);
                 self._setInitObjectState(obj);
                 return obj;
             });
@@ -2984,7 +2984,7 @@ function namespace(root) {
     }, Object.create(RenamedField.prototype));
 
 
-    function Mapper(options) {
+    function Serializer(options) {
         options = options || {};
         this._model = options.model || DefaultModel;
         this._aspects = options.aspects || [];
@@ -2995,8 +2995,8 @@ function namespace(root) {
         this._objectAccessor = options.objectAccessor || new ObjectAccessor(options.pk);
         this._reverseMapping = this.makeReverseMapping(this._mapping);
     }
-    Mapper.prototype = {
-        constructor: Mapper,
+    Serializer.prototype = {
+        constructor: Serializer,
         makeReverseMapping: function(mapping) {
             var reverseMapping = {};
             for (var key in mapping) {
@@ -4072,7 +4072,7 @@ function namespace(root) {
         withMixin: withMixin,
         DefaultModel: DefaultModel,
         RelationalAccessorModelAspectFactory: RelationalAccessorModelAspectFactory,
-        Mapper: Mapper,
+        Serializer: Serializer,
         FieldNode: FieldNode,
         Field: Field,
         RenamedField: RenamedField,
