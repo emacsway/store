@@ -3,10 +3,21 @@ const store = require('../../../../store');
 const { assert } = intern.getPlugin('chai');
 const { registerSuite } = intern.getPlugin('interface.object');
 
-function TestModel (id, a, b) {
+
+/*
+ * @constructor
+ * @param {number} id
+ * @param {number} a
+ * @param {number} b
+ * @param {TestModel[]} nestedCollection
+ * @param {TestModel} nestedObject
+ */
+function TestModel (id, a, b, nestedCollection, nestedObject) {
     this.id = id;
     this.a = a;
     this.b = b;
+    this.nestedCollection = nestedCollection;
+    this.nestedObject = nestedObject;
 }
 
 const TEST_COLLECTION = [
