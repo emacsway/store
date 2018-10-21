@@ -2688,11 +2688,12 @@ function namespace(root) {
         _find: function(query, options) {
             var self = this;
             typeof query === "undefined" && (query = {});
+            var serializedQuery = this._queryEngine.execute(query, this._mapper);
             return new Promise(function(resolve, reject) {
                 self._jQuery.ajax(clone(self._requestOptions, {
                     url: self._getUrl(),
                     type: 'GET',
-                    data: query,
+                    data: serializedQuery,
                     success: function(objectList) {
                         resolve(objectList);
                     },
@@ -2853,8 +2854,9 @@ function namespace(root) {
         load: function(record) {
             return record[this._column];
         },
+        // Don't use tuple for support cases like new Point(x, y) -> {x: x, y: y}
         dump: function(value) {
-            var record = {};  // tuple? for serializer?
+            var record = {};
             record[this._column] = value;
             return record;
         },
@@ -2918,8 +2920,11 @@ function namespace(root) {
         loadError: function(error) {
             return error;  // TODO: implement me
         },
+        // Don't use tuple for support cases like new Point(x, y) -> {x: x, y: y}
         dumpFieldValue: function(field, value) {
-            return [field, value];  // TODO: implement me
+            var result = {};
+            result[field] = value;
+            return result;  // TODO: implement me
         },
         isLoaded: function(recordOrObj) {
             return recordOrObj instanceof this._model;
