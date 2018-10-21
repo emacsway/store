@@ -2860,9 +2860,6 @@ function namespace(root) {
         loadError: function(error) {
             return error;
         },
-        dumpQuery: function(query) {
-            return query;
-        },
         isLoaded: function(recordOrObj) {
             return recordOrObj instanceof this._model;
         },
