@@ -2738,7 +2738,7 @@ function namespace(root) {
                     type: 'POST',
                     dataType: 'json',
                     contentType: 'application/json',
-                    data: self._serialize(self._serializer.dump(obj)),
+                    data: self._stringify(self._serializer.dump(obj)),
                     success: function(response) {
                         resolve(response);
                     },
@@ -2760,7 +2760,7 @@ function namespace(root) {
                     type: 'PUT',
                     dataType: 'json',
                     contentType: 'application/json',
-                    data: self._serialize(self._serializer.dump(obj)),
+                    data: self._stringify(self._serializer.dump(obj)),
                     success: function(response) {
                         resolve(response);
                     },
@@ -2799,7 +2799,7 @@ function namespace(root) {
             pk = toArray(pk);
             return this._url + '/' + pk.join('/');
         },
-        _serialize: function(obj) {
+        _stringify: function(obj) {
             return JSON.stringify(obj);
         }
     }, Object.create(AbstractLeafStore.prototype));
