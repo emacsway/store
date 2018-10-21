@@ -120,21 +120,21 @@ Store public API
    :param options.pk: the name of Primary Key or list of names of composite Primary Key.\
        Optional. The default value is 'id'.
    :type options.pk: string or Array[string]
-   :param ObjectAccessor objectAccessor: an instance of :class:`ObjectAccessor`.
+   :param ObjectAccessor options.objectAccessor: an instance of :class:`ObjectAccessor`.
        Optional. By default will be created on fly using ``options.pk``.
    :param Array[string] options.indexes: the array of field names to be indexed for fast finding or instance of local store.\
        Note, all field used by relations or primary key will be indexed automatically.\
        Optional.
-   :type IStore localStore: an instance of :class:`IStore`. Optional.\
+   :type IStore options.localStore: an instance of :class:`IStore`. Optional.\
        By default will be created on fly using ``options``
-   :param IStore remoteStore: an instance of :class:`IStore`. Optional.\
+   :param IStore options.remoteStore: an instance of :class:`IStore`. Optional.\
        By default will be created on fly using ``options``
-   :param function model: the model constructor, which should be applied before to add object into the store.\
+   :param function options.model: the model constructor, which should be applied before to add object into the store.\
        Can be usefull in combination with :func:`Store.prototype.decompose`.\
        Optional. The default value is :class:`DefaultModel`
-   :param Mapper mapper: an instance of :class:`Mapper`. Optional.\
-       Optioans. By default will be created on fly using ``options.model``
-   :param Object relations: the dictionary describes the schema relations.
+   :param Serializer options.serializer: an instance of :class:`Serializer`. Optional.\
+       By default will be created on fly using ``options.model``
+   :param Object options.relations: the dictionary describes the schema relations.
 
    The format of ``options.relations`` argument::
 
@@ -185,7 +185,7 @@ Store public API
    In case the foreignKey don't has relatedName key, a new relatedName will be generated from the store name and "Set" suffix.
 
    | If ``options.objectAccessor`` is provided, the ``options.pk`` will be ignored.
-   | If ``options.mapper`` is provided, the ``options.model`` and ``options.objectAccessor`` will be ignored.
+   | If ``options.serializer`` is provided, the ``options.model`` and ``options.objectAccessor`` will be ignored.
    | If ``options.localStorage`` is provided, the ``options.indexes`` will be ignored.
 
    The public method of Store:

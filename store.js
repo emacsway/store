@@ -129,8 +129,8 @@ function namespace(root) {
         if (options.remoteStore) {
             this._remoteStore = options.remoteStore;
         } else {
-            if (options.mapper) {
-                var pk = options.mapper.getObjectAccessor().pk;
+            if (options.serializer) {
+                var pk = options.serializer.getObjectAccessor().pk;
             } else if (options.objectAccessor) {
                 var pk = options.objectAccessor.pk;
             } else if (options.pk) {
@@ -1254,22 +1254,22 @@ function namespace(root) {
     }
     QueryDjangoSerializer.prototype = clone({
         constructor: QueryDjangoSerializer,
-        execute: function(query, mapper) {
+        execute: function(query, serializer) {
             var result = {};
             for (var left in query) {
                 var right = query[left];
                 if (this.has(left)) {
-                    clone(this.get(left).call(this, right, mapper), result);
+                    clone(this.get(left).call(this, right, serializer), result);
                 } else {
-                    clone(this._executeRight(left, right, mapper), result);
+                    clone(this._executeRight(left, right, serializer), result);
                 }
             }
             return result;
         },
-        _executeRight: function(left, right, mapper) {
+        _executeRight: function(left, right, serializer) {
             var result = {};
             for (var key in right) {
-                clone(this.get(key).call(this, [left, right[key]], mapper), result);
+                clone(this.get(key).call(this, [left, right[key]], serializer), result);
             }
             return result;
         }
@@ -1279,63 +1279,80 @@ function namespace(root) {
     var queryDjangoSerializer = new QueryDjangoSerializer();
 
 
-    queryDjangoSerializer.register('$query', function(operands, mapper) {
-        return this.execute(operands, mapper);
+    queryDjangoSerializer.register('$query', function(operands, serializer) {
+        return this.execute(operands, serializer);
     }, {indexable: true});
-    queryDjangoSerializer.register('$subjects', function(operands, mapper) {
+    queryDjangoSerializer.register('$subjects', function(operands, serializer) {
         return {};
     }, {indexable: true});
-    queryDjangoSerializer.register('$orderby', function(operands, mapper) {
-        return {};
+    queryDjangoSerializer.register('$orderby', function(operands, serializer) {
+        var clauses = toArray(operands).map(toOrderClause);
+        var result = {};
+        return clauses.reduce(function(accum, clause) {
+            var result = clone(accum, {});
+            var field = keys(clause)[0];
+            var direction = clause[field];
+            // TODO: Map fieldName
+            result[field] = direction;
+            return result;
+        }, {});
     }, true);
-    queryDjangoSerializer.register('$limit', function(operands, mapper) {
+    queryDjangoSerializer.register('$limit', function(operands, serializer) {
         return {};
     }, {indexable: true});
-    queryDjangoSerializer.register('$offset', function(operands, mapper) {
+    queryDjangoSerializer.register('$offset', function(operands, serializer) {
         return {};
     }, {indexable: true});
-    queryDjangoSerializer.register('$and', function(operands, mapper) {
+    queryDjangoSerializer.register('$and', function(operands, serializer) {
         var result = {};
         for (var i in operands) {
-            clone(this.execute(operands[i], mapper), result);
+            clone(this.execute(operands[i], serializer), result);
         };
         return result;
     }, {indexable: true, compound: true});
-    queryDjangoSerializer.register('$or', function(operands, mapper) {
+    queryDjangoSerializer.register('$or', function(operands, serializer) {
         throw Error("Not Supported!");
     }, {compound: true});
-    queryDjangoSerializer.register('$callable', function(operands, mapper) {
+    queryDjangoSerializer.register('$callable', function(operands, serializer) {
         throw Error("Not Supported!");
     });
-    queryDjangoSerializer.register('$eq', function(operands, mapper) {
+    queryDjangoSerializer.register('$eq', function(operands, serializer) {
         var result = {},
-            field = operands[0],
-            value = operands[1];
-        if (typeof value === "undefined" || value === null) {
-            field += '__isnull';
-            value = true;
+            record = serializer.dumpFieldValue(operands[0], operands[1]);
+        for (var field in record) {
+            var value = record[field];
+            if (typeof value === "undefined" || value === null) {
+                field += '__isnull';
+                value = true;
+            }
+            result[field] = value;
         }
-        result[field] = value;
         return result;
     }, {indexable: true});
-    queryDjangoSerializer.register('$ne', function(operands, mapper) {
+    queryDjangoSerializer.register('$ne', function(operands, serializer) {
         var result = {},
-            field = operands[0],
-            value = operands[1];
-        if (typeof value === "undefined" || value === null) {
-            field += '__isnull';
-            value = false;
-        } else {
-            field += '__ne';
+            record = serializer.dumpFieldValue(operands[0], operands[1]);
+        for (var field in record) {
+            var value = record[field];
+            if (typeof value === "undefined" || value === null) {
+                field += '__isnull';
+                value = false;
+            } else {
+                field += '__ne';
+            }
+            result[field] = value;
         }
-        result[field] = value;
         return result;
     });
-    queryDjangoSerializer.register('$rel', function(operands, mapper) {
+    queryDjangoSerializer.register('$rel', function(operands, serializer) {
         var result = {},
             prefix = operands[0],
             subQuery = operands[1];
-        var subResult = this.execute(subQuery, mapper);
+        // TODO: delegate execution to related serializer?
+        // Use PrepareRelationalQuery._visitors.emulatedRelation for it?
+        // But relaton is not a part of Record!
+        // Thus, leave it as it is.
+        var subResult = this.execute(subQuery, serializer);
         for (i in subResult) {
             result[prefix + '__' + i] = subResult[i];
         }
@@ -2390,7 +2407,7 @@ function namespace(root) {
     function AbstractLeafStore(options) {
         AbstractStore.call(this);
         options || (options = {});
-        this._mapper = options.mapper ? options.mapper : new Mapper({
+        this._serializer = options.serializer ? options.serializer : new Serializer({
             model: options.model,
             aspects: options.aspects,
             objectAccessor: options.objectAccessor,
@@ -2406,7 +2423,7 @@ function namespace(root) {
             return this._queryEngine;
         },
         restoreObject: function(record) {
-            var obj = this._mapper.isLoaded(record) ? record : this._mapper.load(record);
+            var obj = this._serializer.isLoaded(record) ? record : this._serializer.load(record);
             return obj;
         },
         getInitObjectState: function(obj) {
@@ -2431,7 +2448,7 @@ function namespace(root) {
             return ++AbstractLeafStore._oidCounter;
         },
         getObjectAccessor: function() {
-            return this._mapper.getObjectAccessor();
+            return this._serializer.getObjectAccessor();
         },
         syncDependencies: function(obj, old) {
         },
@@ -2692,7 +2709,7 @@ function namespace(root) {
         _find: function(query, options) {
             var self = this;
             typeof query === "undefined" && (query = {});
-            var serializedQuery = this._queryEngine.execute(query, this._mapper);
+            var serializedQuery = this._queryEngine.execute(query, this._serializer);
             return new Promise(function(resolve, reject) {
                 self._jQuery.ajax(clone(self._requestOptions, {
                     url: self._getUrl(),
@@ -2721,7 +2738,7 @@ function namespace(root) {
                     type: 'POST',
                     dataType: 'json',
                     contentType: 'application/json',
-                    data: self._serialize(self._mapper.dump(obj)),
+                    data: self._stringify(self._serializer.dump(obj)),
                     success: function(response) {
                         resolve(response);
                     },
@@ -2730,7 +2747,7 @@ function namespace(root) {
                     }
                 }));
             }).then(function(response) {
-                self._mapper.update(response, obj);
+                self._serializer.update(response, obj);
                 self._setInitObjectState(obj);
                 return obj;
             });
@@ -2743,7 +2760,7 @@ function namespace(root) {
                     type: 'PUT',
                     dataType: 'json',
                     contentType: 'application/json',
-                    data: self._serialize(self._mapper.dump(obj)),
+                    data: self._stringify(self._serializer.dump(obj)),
                     success: function(response) {
                         resolve(response);
                     },
@@ -2752,7 +2769,7 @@ function namespace(root) {
                     }
                 }));
             }).then(function(response) {
-                self._mapper.update(response, obj);
+                self._serializer.update(response, obj);
                 self._setInitObjectState(obj);
                 return obj;
             });
@@ -2782,7 +2799,7 @@ function namespace(root) {
             pk = toArray(pk);
             return this._url + '/' + pk.join('/');
         },
-        _serialize: function(obj) {
+        _stringify: function(obj) {
             return JSON.stringify(obj);
         }
     }, Object.create(AbstractLeafStore.prototype));
@@ -2845,41 +2862,141 @@ function namespace(root) {
     };
 
 
-    function Field(name, column, load, dump) {
-        this._name = name;
-        this._column = column || name;
+    function FieldNode(load, dump, loadError) {
         load && (this.load = load);
         dump && (this.load = dump);
+        loadError && (this.loadError = loadError);
     }
-    Field.prototype = {
+    FieldNode.prototype = {
+        constructor: FieldNode,
         getName: function() {
-            return this._name;
+            return undefined;
         },
         load: function(record) {
-            return record[this._column];
-        },
-        // Don't use tuple for support cases like new Point(x, y) -> {x: x, y: y}
-        dump: function(value) {
-            var record = {};
-            record[this._column] = value;
             return record;
         },
+        dump: function(value) {
+            return value;
+        },
         loadError: function(error) {
-            return error[this._column];
+            return error;
         }
     };
 
 
-    function Mapper(options) {
+    // Don't use recordName, because one field can be composed by a few fields
+    function Field(name, load, dump, loadError) {
+        FieldNode.call(this, load, dump, loadError);
+        this._name = name;
+    }
+    Field.prototype = clone({
+        constructor: Field,
+        getName: function() {
+            return this._name;
+        },
+        load: function(record) {
+            return record[this._name];
+        },
+        // Don't use tuple for support cases like new Point(x, y) -> {x: point.x, y: point.y}
+        dump: function(value) {
+            var record = {};
+            record[this._name] = value;
+            return record;
+        },
+        loadError: function(error) {
+            return error[this._name];
+        }
+    }, Object.create(FieldNode.prototype));
+
+
+    function RenamedField(name, recordName) {
+        Field.call(this, name);
+        this._recordName = recordName || name;
+    }
+    RenamedField.prototype = clone({
+        constructor: RenamedField,
+        load: function(record) {
+            return record[this._recordName];
+        },
+        dump: function(value) {
+            var record = {};
+            record[this._recordName] = value;
+            return record;
+        },
+        loadError: function(error) {
+            return error[this._recordName];
+        }
+    }, Object.create(Field.prototype));
+
+
+    /*
+     * @constructor
+     * @param {string} name
+     * @param {string} recordName
+     * @param {FieldNode} child
+     */
+    function NestedField(name, recordName, child) {
+        RenamedField.call(this, name, recordName);
+        this._child = child;
+    }
+    NestedField.prototype = clone({
+        constructor: NestedField,
+        load: function(record) {
+            return this._child.load(record[this._recordName]);
+        },
+        dump: function(value) {
+            var record = {};
+            record[this._recordName] = this.child.dump(value);
+            return record;
+        },
+        loadError: function(error) {
+            return this._child.loadError(error[this._recordName]);
+        }
+    }, Object.create(RenamedField.prototype));
+
+
+    /*
+     * @constructor
+     * @param {string} name
+     * @param {string} recordName
+     * @param {FieldNode} child
+     */
+    function ListField(name, recordName, child) {
+        RenamedField.call(this, name, recordName);
+        this._child = child;
+    }
+    ListField.prototype = clone({
+        constructor: ListField,
+        load: function(record) {
+            var self = this;
+            return record[this._recordName].map(function(recordItem) { return self._child.load(recordItem); });
+        },
+        dump: function(value) {
+            var self = this;
+            var record = {};
+            record[this._recordName] = value.map(function(valueItem) { return self.child.dump(valueItem); });
+            return record;
+        },
+        loadError: function(error) {
+            var self = this;
+            return error[this._recordName].map(function(errorItem) { return self._child.loadError(errorItem); });
+        }
+    }, Object.create(RenamedField.prototype));
+
+
+    function Serializer(options) {
         options = options || {};
         this._model = options.model || DefaultModel;
         this._aspects = options.aspects || [];
-        this._mapping = options.mapping || {};
+        this._fields = (options.fields || []).reduce(function(accum, field) {
+            accum[field.getName()] = field;
+            return accum;
+        }, {});
         this._objectAccessor = options.objectAccessor || new ObjectAccessor(options.pk);
         this._reverseMapping = this.makeReverseMapping(this._mapping);
     }
-    Mapper.prototype = {
-        constructor: Mapper,
+    Serializer.prototype = {
+        constructor: Serializer,
         makeReverseMapping: function(mapping) {
             var reverseMapping = {};
             for (var key in mapping) {
@@ -2890,12 +3007,11 @@ function namespace(root) {
             return reverseMapping;
         },
         load: function(record) {
-            var data = {};
-            for (var key in record) {
-                if (record.hasOwnProperty(key)) {
-                    data[this._reverseMapping[key] || key] = record[key];
-                }
-            }
+            this._initFieldsFormRecordIfDidNot(record);
+            var data = values(this._fields).reduce(function(accum, field) {
+                accum[field.getName()] = field.load(record);
+                return accum;
+            }, {});
             var obj = Object.create(this._model.prototype);
             for (var i = this._aspects.length - 1; i >= 0; i--) {
                 var aspect = toArray(this._aspects[i]);
@@ -2906,25 +3022,22 @@ function namespace(root) {
             return obj;
         },
         update: function(record, obj) {
-            for (var key in record) {
-                if (record.hasOwnProperty(key)) {
-                    this.getObjectAccessor().setValue(obj, (this._reverseMapping[key] || key), record[key]);
-                }
-            }
+            var self = this;
+            this._initFieldsFormRecordIfDidNot(record);
+            values(this._fields).forEach(function(field) {
+                self.getObjectAccessor().setValue(obj, field.getName(), field.load(record));
+            });
         },
         dump: function(obj) {
-            var record = {};
-            for (var key in obj) {
-                if (obj.hasOwnProperty(key)) {
-                    record[this._mapping[key] || key] = this.getObjectAccessor().getValue(obj, key);
-                }
-            }
-            return record;
+            var self = this;
+            return keys(obj).reduce(function(accum, key) {
+                return clone(self.getField(key).dump(self.getObjectAccessor().getValue(obj, key)), accum);
+            }, {});
         },
         loadError: function(error) {
             return error;  // TODO: implement me
         },
-        // Don't use tuple for support cases like new Point(x, y) -> {x: x, y: y}
+        // Don't use tuple for support cases like new Point(x, y) -> {x: point.x, y: point.y}
         dumpFieldValue: function(field, value) {
             var result = {};
             result[field] = value;
@@ -2935,6 +3048,21 @@ function namespace(root) {
         },
         getObjectAccessor: function() {
             return this._objectAccessor;
+        },
+        getField: function(name) {
+            if (!(name in this._fields)) {
+                this._fields[name] = new Field(name);
+            }
+            return this._fields[name];
+        },
+        _initFieldsFormRecordIfDidNot: function(record) {
+            if (keys(this._fields).length === 0) {
+                this._initFieldsFormRecord(record);
+            }
+        },
+        _initFieldsFormRecord: function(record) {
+            var self = this;
+            keys(record).forEach(function(key) { self._fields[key] = new Field(key); });
         }
     };
 
@@ -3944,7 +4072,12 @@ function namespace(root) {
         withMixin: withMixin,
         DefaultModel: DefaultModel,
         RelationalAccessorModelAspectFactory: RelationalAccessorModelAspectFactory,
-        Mapper: Mapper,
+        Serializer: Serializer,
+        FieldNode: FieldNode,
+        Field: Field,
+        RenamedField: RenamedField,
+        NestedField: NestedField,
+        ListField: ListField,
         Observable: Observable,
         observe: observe,
         cascade: cascade,
