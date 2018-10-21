@@ -1561,6 +1561,7 @@ function namespace(root) {
                     }
                 }
             }
+            return query;
         },
         _walkQueryPromisable: function(query) {
             this._walkQuery(query);
@@ -1569,9 +1570,8 @@ function namespace(root) {
                     // Handle the query again?
                     return query;
                 });
-            } else {
-                return query;
             }
+            return query;
         }
     };
 
