@@ -1536,7 +1536,7 @@ function namespace(root) {
                 },
                 visit: function(owner, left, right, query) {
                     owner._promises.push(right);
-                    when(right, function(right) {
+                    when(right, function(right) {  // TODO: It's an obstacle for immutable Query.
                         query[left] = right;
                     });
                 }
@@ -1650,6 +1650,7 @@ function namespace(root) {
                         var relatedQuery = right[opName];
                         var relationName = left;
                         var relation = owner._store.getRelation(relationName);
+                        // TODO: It's an obstacle for immutable Query.
                         andClause.push(when(relation.unfoldRelatedQuery(relatedQuery), function(orClause) {
                             owner._subjects.push(orClause);
                             return {'$or': orClause};
@@ -2995,7 +2996,7 @@ function namespace(root) {
         this._objectAccessor = options.objectAccessor || new ObjectAccessor(options.pk);
         this._reverseMapping = this.makeReverseMapping(this._mapping);
     }
-    Serializer.prototype = {
+    Serializer.prototype = clone({
         constructor: Serializer,
         makeReverseMapping: function(mapping) {
             var reverseMapping = {};
@@ -3064,7 +3065,7 @@ function namespace(root) {
             var self = this;
             keys(record).forEach(function(key) { self._fields[key] = new Field(key); });
         }
-    };
+    }, Object.create(FieldNode.prototype));
 
 
     function Registry(parent) {
