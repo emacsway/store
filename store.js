@@ -2897,7 +2897,7 @@ function namespace(root) {
         load: function(record) {
             return record[this._name];
         },
-        // Don't use tuple for support cases like new Point(x, y) -> {x: x, y: y}
+        // Don't use tuple for support cases like new Point(x, y) -> {x: point.x, y: point.y}
         dump: function(value) {
             var record = {};
             record[this._name] = value;
@@ -3031,13 +3031,13 @@ function namespace(root) {
         dump: function(obj) {
             var self = this;
             return keys(obj).reduce(function(accum, key) {
-                return clone(self._getField(key).dump(self.getObjectAccessor().getValue(obj, key)), accum);
+                return clone(self.getField(key).dump(self.getObjectAccessor().getValue(obj, key)), accum);
             }, {});
         },
         loadError: function(error) {
             return error;  // TODO: implement me
         },
-        // Don't use tuple for support cases like new Point(x, y) -> {x: x, y: y}
+        // Don't use tuple for support cases like new Point(x, y) -> {x: point.x, y: point.y}
         dumpFieldValue: function(field, value) {
             var result = {};
             result[field] = value;
@@ -3049,7 +3049,7 @@ function namespace(root) {
         getObjectAccessor: function() {
             return this._objectAccessor;
         },
-        _getField: function(name) {
+        getField: function(name) {
             if (!(name in this._fields)) {
                 this._fields[name] = new Field(name);
             }
