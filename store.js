@@ -1309,13 +1309,16 @@ function namespace(root) {
     });
     queryDjangoSerializer.register('$eq', function(operands, mapper) {
         var result = {},
-            field = operands[0],
-            value = operands[1];
-        if (typeof value === "undefined" || value === null) {
-            field += '__isnull';
-            value = true;
+            record = mapper.dumpFieldValue(operands[0], operands[1]);
+        console.log(record);
+        for (var field in record) {
+            var value = record[field];
+            if (typeof value === "undefined" || value === null) {
+                field += '__isnull';
+                value = true;
+            }
+            result[field] = value;
         }
-        result[field] = value;
         return result;
     }, {indexable: true});
     queryDjangoSerializer.register('$ne', function(operands, mapper) {
