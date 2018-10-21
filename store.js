@@ -2806,6 +2806,30 @@ function namespace(root) {
     };
 
 
+    function Field(name, column, load, dump) {
+        this._name = name;
+        this._column = column || name;
+        load && (this.load = load);
+        dump && (this.load = dump);
+    }
+    Field.prototype = {
+        getName: function() {
+            return this._name;
+        },
+        load: function(record) {
+            return record[this._column];
+        },
+        dump: function(value) {
+            var record = {};  // tuple? for serializer?
+            record[this._column] = value;
+            return record;
+        },
+        loadError: function(error) {
+            return error[this._column];
+        }
+    };
+
+
     function Mapper(options) {
         options = options || {};
         this._model = options.model || DefaultModel;
@@ -2858,7 +2882,10 @@ function namespace(root) {
             return record;
         },
         loadError: function(error) {
-            return error;
+            return error;  // TODO: implement me
+        },
+        dumpFieldValue: function(field, value) {
+            return [field, value];  // TODO: implement me
         },
         isLoaded: function(recordOrObj) {
             return recordOrObj instanceof this._model;
