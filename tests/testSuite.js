@@ -33,6 +33,7 @@ define([
     function testSuite() {
         log('Total tests: ' + suites.length);
         console.time && console.time('testSuite');
+        // suites[5](function(){}); return;
         store.when(store.whenIter(suites, function(suite, i) {
             log("Run test " + (i + 1));
             return new Promise(function(resolve, reject) {

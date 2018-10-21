@@ -2862,14 +2862,35 @@ function namespace(root) {
     };
 
 
-    // Don't use recordName, because one field can be composed by a few fields
-    function Field(name, load, dump, loadError) {
-        this._name = name;
+    function FieldNode(load, dump, loadError) {
         load && (this.load = load);
         dump && (this.load = dump);
         loadError && (this.loadError = loadError);
     }
-    Field.prototype = {
+    FieldNode.prototype = {
+        constructor: FieldNode,
+        getName: function() {
+            return undefined;
+        },
+        load: function(record) {
+            return record;
+        },
+        dump: function(value) {
+            return value;
+        },
+        loadError: function(error) {
+            return error;
+        }
+    };
+
+
+    // Don't use recordName, because one field can be composed by a few fields
+    function Field(name, load, dump, loadError) {
+        FieldNode.call(this, load, dump, loadError);
+        this._name = name;
+    }
+    Field.prototype = clone({
+        constructor: Field,
         getName: function() {
             return this._name;
         },
@@ -2885,14 +2906,92 @@ function namespace(root) {
         loadError: function(error) {
             return error[this._name];
         }
-    };
+    }, Object.create(FieldNode.prototype));
+
+
+    function RenamedField(name, recordName) {
+        Field.call(this, name);
+        this._recordName = recordName || name;
+    }
+    RenamedField.prototype = clone({
+        constructor: RenamedField,
+        load: function(record) {
+            return record[this._recordName];
+        },
+        dump: function(value) {
+            var record = {};
+            record[this._recordName] = value;
+            return record;
+        },
+        loadError: function(error) {
+            return error[this._recordName];
+        }
+    }, Object.create(Field.prototype));
+
+
+    /*
+     * @constructor
+     * @param {string} name
+     * @param {string} recordName
+     * @param {FieldNode} child
+     */
+    function NestedField(name, recordName, child) {
+        RenamedField.call(this, name, recordName);
+        this._child = child;
+    }
+    NestedField.prototype = clone({
+        constructor: NestedField,
+        load: function(record) {
+            return this._child.load(record[this._recordName]);
+        },
+        dump: function(value) {
+            var record = {};
+            record[this._recordName] = this.child.dump(value);
+            return record;
+        },
+        loadError: function(error) {
+            return this._child.loadError(error[this._recordName]);
+        }
+    }, Object.create(RenamedField.prototype));
+
+
+    /*
+     * @constructor
+     * @param {string} name
+     * @param {string} recordName
+     * @param {FieldNode} child
+     */
+    function ListField(name, recordName, child) {
+        RenamedField.call(this, name, recordName);
+        this._child = child;
+    }
+    ListField.prototype = clone({
+        constructor: ListField,
+        load: function(record) {
+            var self = this;
+            return record[this._recordName].map(function(recordItem) { return self._child.load(recordItem); });
+        },
+        dump: function(value) {
+            var self = this;
+            var record = {};
+            record[this._recordName] = value.map(function(valueItem) { return self.child.dump(valueItem); });
+            return record;
+        },
+        loadError: function(error) {
+            var self = this;
+            return error[this._recordName].map(function(errorItem) { return self._child.loadError(errorItem); });
+        }
+    }, Object.create(RenamedField.prototype));
 
 
     function Mapper(options) {
         options = options || {};
         this._model = options.model || DefaultModel;
         this._aspects = options.aspects || [];
-        this._mapping = options.mapping || {};
+        this._fields = (options.fields || []).reduce(function(accum, field) {
+            accum[field.getName()] = field;
+            return accum;
+        }, {});
         this._objectAccessor = options.objectAccessor || new ObjectAccessor(options.pk);
         this._reverseMapping = this.makeReverseMapping(this._mapping);
     }
@@ -2908,12 +3007,11 @@ function namespace(root) {
             return reverseMapping;
         },
         load: function(record) {
-            var data = {};
-            for (var key in record) {
-                if (record.hasOwnProperty(key)) {
-                    data[this._reverseMapping[key] || key] = record[key];
-                }
-            }
+            this._initFieldsFormRecordIfDidNot(record);
+            var data = values(this._fields).reduce(function(accum, field) {
+                accum[field.getName()] = field.load(record);
+                return accum;
+            }, {});
             var obj = Object.create(this._model.prototype);
             for (var i = this._aspects.length - 1; i >= 0; i--) {
                 var aspect = toArray(this._aspects[i]);
@@ -2924,20 +3022,17 @@ function namespace(root) {
             return obj;
         },
         update: function(record, obj) {
-            for (var key in record) {
-                if (record.hasOwnProperty(key)) {
-                    this.getObjectAccessor().setValue(obj, (this._reverseMapping[key] || key), record[key]);
-                }
-            }
+            var self = this;
+            this._initFieldsFormRecordIfDidNot(record);
+            values(this._fields).forEach(function(field) {
+                self.getObjectAccessor().setValue(obj, field.getName(), field.load(record));
+            });
         },
         dump: function(obj) {
-            var record = {};
-            for (var key in obj) {
-                if (obj.hasOwnProperty(key)) {
-                    record[this._mapping[key] || key] = this.getObjectAccessor().getValue(obj, key);
-                }
-            }
-            return record;
+            var self = this;
+            return keys(obj).reduce(function(accum, key) {
+                return clone(self._getField(key).dump(self.getObjectAccessor().getValue(obj, key)), accum);
+            }, {});
         },
         loadError: function(error) {
             return error;  // TODO: implement me
@@ -2953,6 +3048,21 @@ function namespace(root) {
         },
         getObjectAccessor: function() {
             return this._objectAccessor;
+        },
+        _getField: function(name) {
+            if (!(name in this._fields)) {
+                this._fields[name] = new Field(name);
+            }
+            return this._fields[name];
+        },
+        _initFieldsFormRecordIfDidNot: function(record) {
+            if (keys(this._fields).length === 0) {
+                this._initFieldsFormRecord(record);
+            }
+        },
+        _initFieldsFormRecord: function(record) {
+            var self = this;
+            keys(record).forEach(function(key) { self._fields[key] = new Field(key); });
         }
     };
 
@@ -3963,6 +4073,11 @@ function namespace(root) {
         DefaultModel: DefaultModel,
         RelationalAccessorModelAspectFactory: RelationalAccessorModelAspectFactory,
         Mapper: Mapper,
+        FieldNode: FieldNode,
+        Field: Field,
+        RenamedField: RenamedField,
+        NestedField: NestedField,
+        ListField: ListField,
         Observable: Observable,
         observe: observe,
         cascade: cascade,

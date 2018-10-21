@@ -13,7 +13,13 @@ define(['../../store', '../utils'], function(store, utils) {
             store.clone(attrs, this);
         }
 
-        var mapper = new store.Mapper({model: Model, mapping:{'alias1': 'column1'}});
+        var mapper = new store.Mapper({
+            model: Model,
+            fields: [
+                new store.RenamedField('alias1', 'column1'),
+                new store.Field('column2')
+            ]
+        });
 
         var obj = mapper.load({column1: 2, column2: 3});
         assert(obj instanceof Model);
