@@ -50,7 +50,7 @@ registerSuite('RenamedField', () => {
                 assert.deepEqual(record, {[expected.record.name]: expected.record.value});
             },
             'loadError'() {
-                const msg = field.load({[expected.record.name]: expected.record.msg});
+                const msg = field.loadError({[expected.record.name]: expected.record.msg});
                 assert.deepEqual(msg, expected.obj.msg);
             }
         }

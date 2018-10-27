@@ -2864,9 +2864,15 @@ function namespace(root) {
 
 
     function FieldNode(load, dump, loadError) {
-        load && (this.load = load);
-        dump && (this.load = dump);
-        loadError && (this.loadError = loadError);
+        if (load) {
+            this.load = load;
+        }
+        if (dump) {
+            this.dump = dump;
+        }
+        if (load) {
+            this.loadError = loadError;
+        }
     }
     FieldNode.prototype = {
         constructor: FieldNode,
@@ -3032,7 +3038,10 @@ function namespace(root) {
         dump: function(obj) {
             var self = this;
             return keys(obj).reduce(function(accum, key) {
-                return clone(self.getField(key).dump(self.getObjectAccessor().getValue(obj, key)), accum);
+                return clone(
+                    self.getField(key).dump(self.getObjectAccessor().getValue(obj, key)),
+                    accum
+                );
             }, {});
         },
         loadError: function(error) {

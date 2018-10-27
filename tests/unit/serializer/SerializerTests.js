@@ -47,7 +47,7 @@ registerSuite('Serializer', () => {
             });
         },
         'TestModel': {
-            'should map point'() {
+            'load'() {
                 const obj = serializer.load({
                     id: 1,
                     aRenamed: 2,
@@ -55,6 +55,16 @@ registerSuite('Serializer', () => {
                     y: 6
                 });
                 assert.deepEqual(obj, new TestModel(1, 2, new Point(5, 6)));
+            },
+            'dump'() {
+                debugger;
+                const record = serializer.dump(new TestModel(1, 2, new Point(5, 6)));
+                assert.deepEqual(record, {
+                    id: 1,
+                    aRenamed: 2,
+                    x: 5,
+                    y: 6
+                });
             }
         }
     };
