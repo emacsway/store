@@ -4,7 +4,6 @@ define([
     './unitTests/testQueryDjangoSerializer',
     './unitTests/testUtils',
     './unitTests/testWhenIter',
-    './unitTests/testSerializer',
 
     './testQuery',
     './testSimpleRelations',
