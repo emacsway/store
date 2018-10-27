@@ -48,7 +48,7 @@ registerSuite('Serializer', () => {
         },
         'TestModel': {
             'should map point'() {
-                var obj = serializer.load({
+                const obj = serializer.load({
                     id: 1,
                     aRenamed: 2,
                     x: 5,
