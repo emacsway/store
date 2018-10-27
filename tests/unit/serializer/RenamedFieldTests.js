@@ -22,7 +22,7 @@ registerSuite('RenamedField', () => {
         },
         record: {
             value: 5,
-            name: "a",
+            name: "recordA",
             msg: "Error msg"
         }
     };
@@ -35,7 +35,7 @@ registerSuite('RenamedField', () => {
         },
         'default behaviour': {
             beforeEach() {
-                field = new store.Field(expected.obj.name);
+                field = new store.RenamedField(expected.obj.name, expected.record.name);
             },
             'getName'() {
                 const name = field.getName();
