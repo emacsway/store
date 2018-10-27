@@ -1153,7 +1153,7 @@ function namespace(root) {
     function Orderby(operands, objectAccessor, collection) {
         var self = this;
 		this._operands = toArray(operands).map(function(operand) {
-            return self._toClause(operand);
+            return self._toOrderExpression(operand);
         });
         this._objectAccessor = objectAccessor;
         this._collection = collection;
@@ -1204,7 +1204,7 @@ function namespace(root) {
                 customOrder.indexOf(this._objectAccessor.getValue(rightObj, field))
             );
         },
-        _toClause: toOrderClause,
+        _toOrderExpression: _toOrderExpression,
         _getMinValue: function(obj, path) {
             return Math.min.apply(Math, this._collectValuesThroughAggregate(obj, path));
         },
@@ -1235,7 +1235,7 @@ function namespace(root) {
     };
 
 
-    function toOrderClause(operand) {
+    function _toOrderExpression(operand) {
         var clause = {};
         if (typeof operand === "string") {
             if (operand.substring(0, 1) === "-") {
@@ -1286,7 +1286,7 @@ function namespace(root) {
         return {};
     }, {indexable: true});
     queryDjangoSerializer.register('$orderby', function(operands, serializer) {
-        var clauses = toArray(operands).map(toOrderClause);
+        var clauses = toArray(operands).map(_toOrderExpression);
         var result = {};
         return clauses.reduce(function(accum, clause) {
             var result = clone(accum, {});
