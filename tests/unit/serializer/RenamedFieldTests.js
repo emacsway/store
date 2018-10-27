@@ -15,37 +15,43 @@ function TestModel (a) {
 
 registerSuite('RenamedField', () => {
     const expected = {
-        value: 5,
-        objName: 'a',
-        recordName: 'recordA'
+        obj: {
+            value: 5,
+            name: "a",
+            msg: "Error msg"
+        },
+        record: {
+            value: 5,
+            name: "a",
+            msg: "Error msg"
+        }
     };
     let field;
     let obj;
 
     return {
         beforeEach() {
-            obj = new TestModel(expected.value);
+            obj = new TestModel(expected.obj.value);
         },
         'default behaviour': {
             beforeEach() {
-                field = new store.Field(expected.objName);
+                field = new store.Field(expected.obj.name);
             },
             'getName'() {
                 const name = field.getName();
-                assert.equal(name, expected.objName);
+                assert.equal(name, expected.obj.name);
             },
             'load'() {
-                const value = field.load({[expected.recordName]: expected.value});
-                assert.deepEqual(value, expected.value);
+                const value = field.load({[expected.record.name]: expected.record.value});
+                assert.deepEqual(value, expected.obj.value);
             },
             'dump'() {
-                const record = field.dump(expected.value);
-                assert.deepEqual(record, {[expected.recordName]: expected.value});
+                const record = field.dump(expected.obj.value);
+                assert.deepEqual(record, {[expected.record.name]: expected.record.value});
             },
             'loadError'() {
-                const expectedMsg = "Error msg";
-                const msg = field.load({[expected.recordName]: expectedMsg});
-                assert.deepEqual(msg, expectedMsg);
+                const msg = field.load({[expected.record.name]: expected.record.msg});
+                assert.deepEqual(msg, expected.obj.msg);
             }
         }
     };
