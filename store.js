@@ -2864,15 +2864,9 @@ function namespace(root) {
 
 
     function FieldNode(load, dump, loadError) {
-        if (load) {
-            this.load = load;
-        }
-        if (dump) {
-            this.dump = dump;
-        }
-        if (load) {
-            this.loadError = loadError;
-        }
+        load && (this.load = load);
+        dump && (this.dump = dump);
+        loadError && (this.loadError = loadError)
     }
     FieldNode.prototype = {
         constructor: FieldNode,
