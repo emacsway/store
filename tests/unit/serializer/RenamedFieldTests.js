@@ -13,10 +13,11 @@ function TestModel (a) {
 }
 
 
-registerSuite('Field', () => {
+registerSuite('RenamedField', () => {
     const expected = {
         value: 5,
-        objName: 'a'
+        objName: 'a',
+        recordName: 'recordA'
     };
     let field;
     let obj;
@@ -34,16 +35,16 @@ registerSuite('Field', () => {
                 assert.equal(name, expected.objName);
             },
             'load'() {
-                const value = field.load({[expected.objName]: expected.value});
+                const value = field.load({[expected.recordName]: expected.value});
                 assert.deepEqual(value, expected.value);
             },
             'dump'() {
-                const record = field.dump(expected.a);
-                assert.deepEqual(record, {[expected.objName]: expected.value});
+                const record = field.dump(expected.value);
+                assert.deepEqual(record, {[expected.recordName]: expected.value});
             },
             'loadError'() {
                 const expectedMsg = "Error msg";
-                const msg = field.load({[expected.objName]: expectedMsg});
+                const msg = field.load({[expected.recordName]: expectedMsg});
                 assert.deepEqual(msg, expectedMsg);
             }
         }
