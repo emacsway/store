@@ -30,9 +30,8 @@
   },
   "devDependencies": {
     "intern": "^4.3.1",
-    "intern-geezer": "^2",
-    "requirejs": "^2.3.6",
-    "systemjs": "^2.0.2"
+    "intern-geezer": "^2"
   },
-  "homepage": "https://github.com/joor/store-js-external#readme"
+  "homepage": "https://github.com/joor/store-js-external#readme",
+  "dependencies": {}
 }
